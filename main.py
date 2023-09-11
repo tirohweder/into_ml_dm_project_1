@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import seaborn as sns
+from scipy import stats as st
 
 def main():
     ### load data ###
@@ -44,13 +45,17 @@ def main():
     plt.show()
     
     # basic statistical metrics
-    stat_df = pd.DataFrame(columns=data.columns, index=("max", "min", "mean", "median", "std"))
+    stat_df = pd.DataFrame(columns=data.columns, index=("max", "min", "mean", "median", "std", "std (N-1)", "var", "var (N-1)", "mode"))
     for column in data.columns:
         stat_df[column]["mean"] = np.mean(data[column])
         stat_df[column]["median"] = np.median(data[column])
         stat_df[column]["min"] = np.min(data[column])
         stat_df[column]["max"] = np.max(data[column])
         stat_df[column]["std"] = np.std(data[column])
+        stat_df[column]["std (N-1)"] = np.std(data[column], ddof=1)
+        stat_df[column]["var"] = np.var(data[column])
+        stat_df[column]["var (N-1)"] = np.var(data[column], ddof=1)
+        stat_df[column]["mode"] = st.mode(data[column])
     
     with open(os.path.join(os.getcwd(),"data_measures.txt"), 'w') as f:
         f.write(stat_df.to_string())
