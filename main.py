@@ -45,7 +45,7 @@ def main():
     plt.show()
     
     # basic statistical metrics
-    stat_df = pd.DataFrame(columns=data.columns, index=("max", "min", "mean", "median", "std", "std (N-1)", "var", "var (N-1)", "mode"))
+    stat_df = pd.DataFrame(columns=data.columns, index=("max", "min", "mean", "median", "std", "std (N-1)", "var", "var (N-1)", "mode", "25%-percentile", "75%-percentile"))
     for column in data.columns:
         stat_df[column]["mean"] = np.mean(data[column])
         stat_df[column]["median"] = np.median(data[column])
@@ -56,6 +56,8 @@ def main():
         stat_df[column]["var"] = np.var(data[column])
         stat_df[column]["var (N-1)"] = np.var(data[column], ddof=1)
         stat_df[column]["mode"] = st.mode(data[column])
+        stat_df[column]["25%-percentile"] = np.quantile(data[column], 0.25)
+        stat_df[column]["75%-percentile"] = np.quantile(data[column], 0.75)
     
     with open(os.path.join(os.getcwd(),"data_measures.txt"), 'w') as f:
         f.write(stat_df.to_string())
