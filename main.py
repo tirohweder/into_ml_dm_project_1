@@ -7,6 +7,8 @@ import matplotlib.pyplot as plt
 import os
 import seaborn as sns
 from scipy import stats as st
+from scipy.linalg import svd
+from sklearn.preprocessing import StandardScaler
 
 def main():
     ### load data ###
@@ -93,10 +95,50 @@ def main():
     
     # standardize
     
+    data_pca = data.drop(["doy", "season"], axis=1)
     
-    
+    scaler = StandardScaler()
+    scaler.fit(data_pca)
+    data_pca_scaled = scaler.transform(data_pca)
+  
     ### PCA ###
 
+    U,S,V = svd(data_pca_scaled, full_matrices=False)
+    
+    # Compute variance explained by principal components
+    rho = (S*S) / (S*S).sum() 
+
+    plt.figure()
+    plt.plot(range(1,len(rho)+1),rho,'x-')
+    plt.plot(range(1,len(rho)+1),np.cumsum(rho),'o-')
+    plt.title('Variance explained by principal components');
+    plt.xlabel('Principal component');
+    plt.ylabel('Variance explained');
+    plt.legend(['Individual','Cumulative'])
+    plt.grid()
+    plt.show()
+    
+    V_real = V.T    
+    Z = data_pca_scaled @ V_real
+    
+    # Indices of the principal components to be plotted
+    i = 0
+    j = 1
+
+    # Plot PCA of the data
+    plt.figure()
+    plt.title('Los Angeles Ozone: PCA')
+    #Z = array(Z)
+    for c in range(len(sorted(set(data["season"])))):
+        # select indices belonging to class c:
+        class_mask = data["season"]==c
+        plt.plot(Z[class_mask,i], Z[class_mask,j], 'o', alpha=.5)
+    plt.legend(["winter", "spring", "summer", "fall"])
+    plt.xlabel('PC{0}'.format(i+1))
+    plt.ylabel('PC{0}'.format(j+1))
+
+    # Output result to screen
+    plt.show()
 
 if __name__ == "__main__":
     main()
