@@ -3,98 +3,92 @@
 
 import pandas as pd
 import numpy as np
+import matplotlib
+import warnings
 import matplotlib.pyplot as plt
 import os
 import seaborn as sns
 from scipy import stats as st
 from scipy.linalg import svd
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
-def main():
-    ### load data ###
-    data_path = os.path.join(os.getcwd(),"LAozone.csv")
-    data = pd.read_csv(data_path)
+warnings.filterwarnings("ignore", category=matplotlib.MatplotlibDeprecationWarning)
 
-    ### add additional feature ###
-    # decoding seasons from doy
-    # 0 = winter (december, january, february)
-    # 1 = spring (march, april, may)
-    # 2 = summer (june, july, august)
-    # 3 = autumn (september, october, november)
-    data["season"] = 0
-    for row in data.index:
-        if data["doy"][row] <= 60 or data["doy"][row] > 335:
-            data["season"][row] = 0
-        if data["doy"][row] > 60 and data["doy"][row] <= 152:
-            data["season"][row] = 1
-        if data["doy"][row] > 152 and data["doy"][row] <= 244:
-            data["season"][row] = 2
-        if data["doy"][row] > 244 and data["doy"][row] <= 335:
-            data["season"][row] = 3
 
-    ### inspect data ###
-    # finding NaN values
-    missing_idx = np.isnan(data)
-    missing_counter = np.sum(missing_idx, 0) > 0
 
-    plt.figure().set_figheight(1)
-    plt.plot(missing_counter.index,missing_counter.values.reshape(len(missing_counter),1), 'bo')
-    plt.title("Missing Values (NaN) in Features")
-    plt.xlabel("features")
-    plt.ylabel("NaNs present")
-    plt.ylim(-0.4, 1.4)
-    plt.yticks([0,1],["FALSE", "TRUE"])
-    plt.show()
+### inspect data ###
+# finding NaN or no values
+# looking for duplicates
+def inspect_data(data):
+    print("Is there missing Data?: ", data.isnull().sum().sum())
+    print("Is the duplicated data?:", data.duplicated().sum())
 
-    # basic statistical metrics
-    stat_df = pd.DataFrame(columns=data.columns, index=("max", "min", "mean", "median", "std", "std (N-1)", "var", "var (N-1)", "mode", "25%-percentile", "75%-percentile"))
+    # count, mean, std, min, 25, 50(median), 75, max
+    #with open(os.path.join(os.getcwd(), "data_measures.txt"), 'w') as f:
+    #    f.write(data.describe().round(2).to_string())
+
+
+    stat_df = pd.DataFrame(columns=data.columns, index=(
+        "mean", "std","var","min", "25%-percentile", "median",  "75%-percentile", "max", "std (N-1)",  "var (N-1)",
+        "mode"))
     for column in data.columns:
-        stat_df[column]["mean"] = np.mean(data[column])
-        stat_df[column]["median"] = np.median(data[column])
-        stat_df[column]["min"] = np.min(data[column])
-        stat_df[column]["max"] = np.max(data[column])
-        stat_df[column]["std"] = np.std(data[column])
-        stat_df[column]["std (N-1)"] = np.std(data[column], ddof=1)
-        stat_df[column]["var"] = np.var(data[column])
-        stat_df[column]["var (N-1)"] = np.var(data[column], ddof=1)
+        stat_df[column]["mean"] = round(np.mean(data[column]),2)
+        stat_df[column]["median"] = round(np.median(data[column]),2)
+        stat_df[column]["min"] = round(np.min(data[column]),2)
+        stat_df[column]["max"] = round(np.max(data[column]),2)
+        stat_df[column]["std"] = round(np.std(data[column]),2)
+        stat_df[column]["std (N-1)"] = round(np.std(data[column], ddof=1),2)
+        stat_df[column]["var"] = round(np.var(data[column]),2)
+        stat_df[column]["var (N-1)"] = round(np.var(data[column], ddof=1),2)
         stat_df[column]["mode"] = st.mode(data[column])
-        stat_df[column]["25%-percentile"] = np.quantile(data[column], 0.25)
-        stat_df[column]["75%-percentile"] = np.quantile(data[column], 0.75)
+        stat_df[column]["25%-percentile"] = round(np.quantile(data[column], 0.25),2)
+        stat_df[column]["75%-percentile"] = round(np.quantile(data[column], 0.75),2)
 
-    with open(os.path.join(os.getcwd(),"data_measures.txt"), 'w') as f:
+    with open(os.path.join(os.getcwd(), "data_measures.txt"), 'w') as f:
         f.write(stat_df.to_string())
+
+
+# Data Visualisation
+def data_visualisation(data):
+
 
     # plot boxplots/distribution of features
     plt.boxplot(data, labels=data.columns)
     plt.title("Boxplots of all Features")
-    plt.xlabel("features")
-    plt.ylabel("data values")
+    plt.xlabel("Features")
+    plt.ylabel("Data values")
     plt.show()
 
     n_bins = 25
-    fig, ax = plt.subplots(2, int(np.ceil(len(data.columns)/2)))
+    fig, ax = plt.subplots(2, int(np.ceil(len(data.columns) / 2)))
     plt.figure().set_figheight(10)
     plt.figure().set_figwidth(20)
     fig.tight_layout()
     for col_id in range(len(data.columns)):
-        if col_id < int(np.ceil(len(data.columns)/2)):
-            ax[0,col_id].hist(data.iloc[:,col_id], bins=n_bins)
-            ax[0,col_id].set_title(data.columns[col_id])
-        if col_id >= int(np.ceil(len(data.columns)/2)):
-            ax[1,col_id-int(np.ceil(len(data.columns)/2))].hist(data.iloc[:,col_id], bins=n_bins)
-            ax[1,col_id-int(np.ceil(len(data.columns)/2))].set_title(data.columns[col_id])
+        if col_id < int(np.ceil(len(data.columns) / 2)):
+            ax[0, col_id].hist(data.iloc[:, col_id], bins=n_bins)
+            ax[0, col_id].set_title(data.columns[col_id])
+        if col_id >= int(np.ceil(len(data.columns) / 2)):
+            ax[1, col_id - int(np.ceil(len(data.columns) / 2))].hist(data.iloc[:, col_id], bins=n_bins)
+            ax[1, col_id - int(np.ceil(len(data.columns) / 2))].set_title(data.columns[col_id])
     plt.show()
 
     # show correlations
-
+    plt.figure(figsize=(10,8))
     sns.heatmap(data.corr(), cmap="RdBu")
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
+    plt.title("Correlation Heat Map")
+    plt.tight_layout
+    plt.show()
 
+
+def pca(data):
     ### transform data ###
-
     # one hot encoding (if needed)
 
     # standardize
-    
+
     data_pca = data.drop(["doy", "season"], axis=1)
 
     scaler = StandardScaler()
@@ -102,19 +96,18 @@ def main():
     data_pca_scaled = scaler.transform(data_pca)
 
     ### PCA ###
-
-    U,S,V = svd(data_pca_scaled, full_matrices=False)
+    U, S, V = svd(data_pca_scaled, full_matrices=False)
 
     # Compute variance explained by principal components
-    rho = (S*S) / (S*S).sum()
+    rho = (S * S) / (S * S).sum()
 
     plt.figure()
-    plt.plot(range(1,len(rho)+1),rho,'x-')
-    plt.plot(range(1,len(rho)+1),np.cumsum(rho),'o-')
+    plt.plot(range(1, len(rho) + 1), rho, 'x-')
+    plt.plot(range(1, len(rho) + 1), np.cumsum(rho), 'o-')
     plt.title('Variance explained by principal components');
     plt.xlabel('Principal component');
     plt.ylabel('Variance explained');
-    plt.legend(['Individual','Cumulative'])
+    plt.legend(['Individual', 'Cumulative'])
     plt.grid()
     plt.show()
 
@@ -128,19 +121,20 @@ def main():
     # Plot PCA of the data
     plt.figure()
     plt.title('Los Angeles Ozone: PCA')
-    #Z = array(Z)
+    # Z = array(Z)
     for c in range(len(sorted(set(data["season"])))):
         # select indices belonging to class c:
-        class_mask = data["season"]==c
-        plt.plot(Z[class_mask,i], Z[class_mask,j], 'o', alpha=.5)
+        class_mask = data["season"] == c
+        plt.plot(Z[class_mask, i], Z[class_mask, j], 'o', alpha=.5)
     plt.legend(["winter", "spring", "summer", "fall"])
-    plt.xlabel('PC{0}'.format(i+1))
-    plt.ylabel('PC{0}'.format(j+1))
+    plt.xlabel('PC{0}'.format(i + 1))
+    plt.ylabel('PC{0}'.format(j + 1))
 
     # Output result to screen
     plt.show()
 
 
+def pca_analysis(data):
     # Temp - IBH IBT
     # Season - Temp vis
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
@@ -164,7 +158,6 @@ def main():
 
     # Plot data with different symbols for each season on the horizontal line
     for i, row in data.iterrows():
-        print(data["season"][i])
         plt.scatter(row['temp'], 1, color=colors[data["season"][i]])
 
     # Set plot details
@@ -186,10 +179,40 @@ def main():
         class_mask = data["season"] == c
         plt.plot(data["temp"][class_mask], data["vis"][class_mask], 'o', alpha=.3)
 
-#    plt.legend(data["season"])
- #   plt.xlabel(data["temp"])
-  #  plt.ylabel(data["vis"])
+    #    plt.legend(data["season"])
+    #   plt.xlabel(data["temp"])
+    #  plt.ylabel(data["vis"])
     plt.show()
+
+
+def main():
+    ### load data ###
+    data_path = os.path.join(os.getcwd(), "LAozone.csv")
+    data = pd.read_csv(data_path)
+
+    ### add additional feature ###
+    # decoding seasons from doy
+    # 0 = winter (december, january, february)
+    # 1 = spring (march, april, may)
+    # 2 = summer (june, july, august)
+    # 3 = autumn (september, october, november)
+    data["season"] = 0
+    for row in data.index:
+        if data["doy"][row] <= 60 or data["doy"][row] > 335:
+            data["season"][row] = 0
+        if data["doy"][row] > 60 and data["doy"][row] <= 152:
+            data["season"][row] = 1
+        if data["doy"][row] > 152 and data["doy"][row] <= 244:
+            data["season"][row] = 2
+        if data["doy"][row] > 244 and data["doy"][row] <= 335:
+            data["season"][row] = 3
+
+    #inspect_data(data)
+    data_visualisation(data)
+    # basic_statistical_metrics(data)
+    #pca(data)
+    # pca_analysis(data)
+
 
 if __name__ == "__main__":
     main()
