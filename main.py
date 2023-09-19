@@ -12,6 +12,10 @@ from scipy import stats as st
 from scipy.linalg import svd
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.decomposition import PCA
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 
 from scipy.stats import norm
 warnings.filterwarnings("ignore", category=matplotlib.MatplotlibDeprecationWarning)
@@ -23,7 +27,7 @@ warnings.filterwarnings("ignore", category=matplotlib.MatplotlibDeprecationWarni
 # looking for duplicates
 def inspect_data(data):
     print("Is there missing Data?: ", data.isnull().sum().sum())
-    print("Is the duplicated data?:", data.duplicated().sum())
+    print("Is there duplicated data?:", data.duplicated().sum())
 
     # count, mean, std, min, 25, 50(median), 75, max
     #with open(os.path.join(os.getcwd(), "data_measures.txt"), 'w') as f:
@@ -56,7 +60,7 @@ def data_visualisation(data):
 
     # plot boxplots/distribution of features
     plt.figure(figsize=(10, 8))
-    plt.boxplot((data - data.mean()) / data.std() , labels=data.columns)
+    plt.boxplot((data - data.mean()) / data.std(ddof=1) , labels=data.columns)
     plt.title("Boxplots of all Features")
     plt.xlabel("Features")
     plt.ylabel("Data values")
@@ -102,6 +106,48 @@ def data_visualisation(data):
 
     #with open(os.path.join(os.getcwd(), "data_measures.txt"), 'w') as f:
     #    f.write(data.corr().to_string())
+    
+    # Temp - IBH IBT
+    # Season - Temp vis
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+
+    ax[0].scatter(data["temp"], data["ibh"], color='blue', label='temp vs ibh')
+    ax[0].set_title('Temperature vs IBH')
+    ax[0].set_xlabel('Temperature')
+    ax[0].set_ylabel('IBH')
+
+    ax[1].scatter(data["temp"], data["ibt"], color='red', label='temp vs ibt')
+    ax[1].set_title('Temperature vs IBT')
+    ax[1].set_xlabel('Temperature')
+    ax[1].set_ylabel('IBT')
+    plt.show()
+    
+    ### Mapping season to temperature ####
+    # Set up the plot
+    plt.figure(figsize=(10, 6))
+    colors = ['green', "red", "blue", "orange"]
+    plt.axhline(y=1, color='grey', linestyle='--', lw=0.5)
+    for i, row in data.iterrows():
+        plt.scatter(row['temp'], 1, color=colors[data["season"][i]])
+    plt.title("Temperature with Season Symbols")
+    plt.xlabel("Temperature (°C)")
+    plt.yticks([])  # Hide y-ticks as it's a 1D plot
+    plt.legend()
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5, axis='x')
+    plt.tight_layout()
+    plt.show()
+    
+    ###  Mapping season to temperature and visibility ###
+    for c in range(4):
+        # select indices belonging to class c:
+        class_mask = data["season"] == c
+        plt.plot(data["temp"][class_mask], data["vis"][class_mask], 'o', alpha=.3)
+
+    #plt.legend(data["season"])
+    plt.legend(["winter", "spring", "summer", "fall"])
+    #plt.xlabel(data["temp"])
+    #plt.ylabel(data["vis"])
+    plt.show()
 
 def pca(data):
     ### transform data ###
@@ -111,9 +157,13 @@ def pca(data):
 
     data_pca = data.drop(["doy", "season"], axis=1)
 
-    scaler = StandardScaler()
-    scaler.fit(data_pca)
-    data_pca_scaled = scaler.transform(data_pca)
+    #scaler = StandardScaler()
+    #scaler.fit(data_pca)
+    #data_pca_scaled = scaler.transform(data_pca)
+    
+    mean = data_pca.mean()
+    std = data_pca.std(ddof=1)
+    data_pca_scaled = np.asarray((data_pca - mean) / std)
 
     ### PCA ###
     U, S, V = svd(data_pca_scaled, full_matrices=False)
@@ -121,15 +171,16 @@ def pca(data):
     # Compute variance explained by principal components
     rho = (S * S) / (S * S).sum()
 
-
+    threshold = 0.9
 
     plt.figure()
     plt.plot(range(1, len(rho) + 1), rho, 'x-')
     plt.plot(range(1, len(rho) + 1), np.cumsum(rho), 'o-')
+    plt.plot([1,len(rho)],[threshold, threshold],'k--')
     plt.title('Variance explained by principal components');
     plt.xlabel('Principal component');
     plt.ylabel('Variance explained');
-    plt.legend(['Individual', 'Cumulative'])
+    plt.legend(['Individual', 'Cumulative', 'Threshold'])
     plt.grid()
     plt.show()
 
@@ -151,79 +202,34 @@ def pca(data):
     plt.legend(["winter", "spring", "summer", "fall"])
     plt.xlabel('PC{0}'.format(i + 1))
     plt.ylabel('PC{0}'.format(j + 1))
-
-    # Output result to screen
     plt.show()
-
-
-
-def pca_analysis(data):
-    # Temp - IBH IBT
-    # Season - Temp vis
-    fig, ax = plt.subplots(1, 2, figsize=(14, 6))
-
-    ax[0].scatter(data["temp"], data["ibh"], color='blue', label='temp vs ibh')
-    ax[0].set_title('Temperature vs IBH')
-    ax[0].set_xlabel('Temperature')
-    ax[0].set_ylabel('IBH')
-
-    ax[1].scatter(data["temp"], data["ibt"], color='red', label='temp vs ibt')
-    ax[1].set_title('Temperature vs IBT')
-    ax[1].set_xlabel('Temperature')
-    ax[1].set_ylabel('IBT')
-    plt.show()
-
-    ### Mapping season to temperature ####
-    # Set up the plot
-    plt.figure(figsize=(10, 6))
-    colors = ['green', "red", "blue", "orange"]
-    plt.axhline(y=1, color='grey', linestyle='--', lw=0.5)
-    for i, row in data.iterrows():
-        plt.scatter(row['temp'], 1, color=colors[data["season"][i]])
-    plt.title("Temperature with Season Symbols")
-    plt.xlabel("Temperature (°C)")
-    plt.yticks([])  # Hide y-ticks as it's a 1D plot
-    plt.legend()
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5, axis='x')
-    plt.tight_layout()
-    plt.show()
-
-
-    ###  Mapping season to temperature and visibility ###
-    for c in range(4):
-        # select indices belonging to class c:
-        class_mask = data["season"] == c
-        plt.plot(data["temp"][class_mask], data["vis"][class_mask], 'o', alpha=.3)
-
-    plt.legend(data["season"])
-    #plt.xlabel(data["temp"])
-    #plt.ylabel(data["vis"])
-    plt.show()
-
-
-    # Show projection of data onto principal components
-    mean = data.mean()
-    std = data.std()
-    data_normalized = (data - mean) / std
-
-    pca = PCA()
-    pca.fit(data_normalized.drop(["doy", "season"]))
-    num_components = 5
-
+    
+    ## plot for pca contribution
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    for i in range(num_components):
-        ax.plot(data.columns, pca.components_[i], label=f'Component {i + 1}', marker='o')
+    for i in range(5):
+        ax.plot(data_pca.columns, V_real[:,i], label=f'Component {i + 1}', marker='o')
 
-    for i in range(num_components):
-        print(pca.components_[i])
-
-    ax.set_xticks(data.columns)
-    ax.set_xticklabels(data.columns, rotation=45)
+    for i in range(5):
+        print(V_real[:,i])
+    
+    ax.set_xticks(data_pca.columns)
+    ax.set_xticklabels(data_pca.columns, rotation=45)
     ax.set_ylabel('Loading')
     ax.set_title('PCA Component Loadings for Each Feature')
     ax.legend()
     ax.grid(True)
+    plt.show()
+    
+    ### pca heatmap
+    fig, ax = plt.subplots(figsize=(14, 8))
+    im = ax.imshow(V_real, cmap="RdBu")
+    ax.legend()
+    plt.colorbar(im)
+    ax.set_yticks(np.arange(len(data_pca.columns)), labels=data_pca.columns)
+    ax.set_ylabel('Feature')
+    ax.set_xlabel('PCA component')
+    ax.set_title('PCA Component Loadings for Each Feature')
     plt.show()
 
 
@@ -249,12 +255,34 @@ def main():
         if data["doy"][row] > 244 and data["doy"][row] <= 335:
             data["season"][row] = 3
 
-    #inspect_data(data)
-    #data_visualisation(data)
-    #pca(data)
-    pca_analysis(data)
+    inspect_data(data)
+    data_visualisation(data)
+    pca(data)
+    
+    data_Y = data["season"].copy()
+    
+    data_X = data.drop(["doy", "season"], axis=1).copy()
+    
+    mean = data_X.mean()
+    std = data_X.std(ddof=1)
+    data_X = np.asarray((data_X - mean) / std)
+    
+    X_train, X_test, y_train, y_test = train_test_split(data_X, data_Y, test_size = 0.2, random_state=5)
 
-
+    KNN = KNeighborsClassifier(n_neighbors = 10)
+    KNN.fit(X_train, y_train)
+    
+    print(KNN.score(X_test,y_test))
+    
+    DT = DecisionTreeClassifier()
+    DT.fit(X_train,y_train)
+    
+    print(DT.score(X_test,y_test))
+    
+    RF = RandomForestClassifier()
+    RF.fit(X_train,y_train)
+    
+    print(RF.score(X_test,y_test))
 
 
 
