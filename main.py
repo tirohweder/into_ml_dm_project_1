@@ -174,8 +174,8 @@ def pca(data):
     threshold = 0.9
 
     plt.figure()
-    plt.plot(range(1, len(rho) + 1), rho, 'x-')
-    plt.plot(range(1, len(rho) + 1), np.cumsum(rho), 'o-')
+    plt.plot(range(1, len(rho) + 1), rho, 'x-', color='red')
+    plt.plot(range(1, len(rho) + 1), np.cumsum(rho), 'o-', color='blue')
     plt.plot([1,len(rho)],[threshold, threshold],'k--')
     plt.title('Variance explained by principal components');
     plt.xlabel('Principal component');
@@ -186,12 +186,12 @@ def pca(data):
 
     V_real = V.T
     Z = data_pca_scaled @ V_real
-
+    
+    # Plot PCA of the data (two pca components)
     # Indices of the principal components to be plotted
-    i = 0
-    j = 1
+    i = 1
+    j = 4
 
-    # Plot PCA of the data
     plt.figure()
     plt.title('Los Angeles Ozone: PCA')
     # Z = array(Z)
@@ -204,13 +204,33 @@ def pca(data):
     plt.ylabel('PC{0}'.format(j + 1))
     plt.show()
     
+    #number of pca components to be analysed further
+    max_pca = 5
+    
+    #plot matrix scatter pca plot for max_pca components
+    fig, ax = plt.subplots(max_pca, max_pca, figsize=(20, 10))
+    plt.suptitle(f'Los Angeles Ozone: PCA for {max_pca} components')
+    
+    for i in range(max_pca):
+        for j in range(max_pca):
+            for c in range(len(sorted(set(data["season"])))):
+                # select indices belonging to class c:
+                class_mask = data["season"] == c
+                ax[i][j].plot(Z[class_mask, i], Z[class_mask, j], 'o', alpha=.5)
+            
+            ax[i][j].set_xlabel('PC{0}'.format(i + 1))
+            ax[i][j].set_ylabel('PC{0}'.format(j + 1))
+    plt.legend(["winter", "spring", "summer", "fall"])
+    plt.tight_layout()
+    plt.show()
+    
     ## plot for pca contribution
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    for i in range(5):
+    for i in range(max_pca):
         ax.plot(data_pca.columns, V_real[:,i], label=f'Component {i + 1}', marker='o')
 
-    for i in range(5):
+    for i in range(max_pca):
         print(V_real[:,i])
     
     ax.set_xticks(data_pca.columns)
@@ -223,10 +243,11 @@ def pca(data):
     
     ### pca heatmap
     fig, ax = plt.subplots(figsize=(14, 8))
-    im = ax.imshow(V_real, cmap="RdBu")
+    im = ax.imshow(V_real[:,0:max_pca], cmap="RdBu")
     ax.legend()
     plt.colorbar(im)
     ax.set_yticks(np.arange(len(data_pca.columns)), labels=data_pca.columns)
+    ax.set_xticks(np.arange(max_pca), labels=np.arange(max_pca)+1)
     ax.set_ylabel('Feature')
     ax.set_xlabel('PCA component')
     ax.set_title('PCA Component Loadings for Each Feature')
@@ -267,7 +288,7 @@ def main():
     std = data_X.std(ddof=1)
     data_X = np.asarray((data_X - mean) / std)
     
-    X_train, X_test, y_train, y_test = train_test_split(data_X, data_Y, test_size = 0.2, random_state=5)
+    X_train, X_test, y_train, y_test = train_test_split(data_X, data_Y, test_size = 0.2, random_state=5, shuffle=True)
 
     KNN = KNeighborsClassifier(n_neighbors = 10)
     KNN.fit(X_train, y_train)
