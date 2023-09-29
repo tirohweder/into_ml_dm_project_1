@@ -26,14 +26,16 @@ warnings.filterwarnings("ignore", category=matplotlib.MatplotlibDeprecationWarni
 # finding NaN or no values
 # looking for duplicates
 def inspect_data(data):
+    # check for missing data
     print("Is there missing Data?: ", data.isnull().sum().sum())
+    # check for duplicated data
     print("Is there duplicated data?:", data.duplicated().sum())
 
     # count, mean, std, min, 25, 50(median), 75, max
     #with open(os.path.join(os.getcwd(), "data_measures.txt"), 'w') as f:
     #    f.write(data.describe().round(2).to_string())
 
-
+    # calculation of simple summary statistics
     stat_df = pd.DataFrame(columns=data.columns, index=(
         "mean", "std","var","min", "25%-percentile", "median",  "75%-percentile", "max", "std (N-1)",  "var (N-1)",
         "mode"))
@@ -49,16 +51,14 @@ def inspect_data(data):
         stat_df[column]["mode"] = st.mode(data[column])
         stat_df[column]["25%-percentile"] = round(np.quantile(data[column], 0.25),2)
         stat_df[column]["75%-percentile"] = round(np.quantile(data[column], 0.75),2)
-
+    
+    # write summary statistics to file
     with open(os.path.join(os.getcwd(), "data_measures.txt"), 'w') as f:
         f.write(stat_df.to_string())
 
-
 # Data Visualisation
 def data_visualisation(data):
-
-
-    # plot boxplots/distribution of features
+    ### plot boxplots/distribution of features ###
     plt.figure(figsize=(10, 8))
     plt.boxplot((data - data.mean()) / data.std(ddof=1) , labels=data.columns)
     plt.title("Boxplots of all Features")
@@ -80,7 +80,8 @@ def data_visualisation(data):
     #        ax[1, col_id - int(np.ceil(len(data.columns) / 2))].hist(data.iloc[:, col_id], bins=n_bins)
     #        ax[1, col_id - int(np.ceil(len(data.columns) / 2))].set_title(data.columns[col_id])
     #plt.show()
-
+    
+    ### plot histogramms ###
     # Set up the figure size and grid layout
     plt.figure(figsize=(15, 12))
     sns.set_style("whitegrid")
@@ -93,9 +94,7 @@ def data_visualisation(data):
         plt.tight_layout()
     plt.show()
 
-
-
-    # show correlations
+    ### plot correlations ###
     plt.figure(figsize=(10,8))
     sns.heatmap(data.corr(), cmap="RdBu")
     plt.xticks(rotation=90)
@@ -103,10 +102,31 @@ def data_visualisation(data):
     plt.title("Correlation Heat Map")
     plt.tight_layout
     plt.show()
+    print(data.corr())
+    
+    #calculate empirical covariance and derive empirical correlation
+    cov_mat = np.cov(data, rowvar=False, ddof=1)
+    print(cov_mat)
+    cor_mat = np.zeros((data.shape[1],data.shape[1]))
+    
+    for i in range(data.shape[1]):
+        for j in range(data.shape[1]):
+            cor_mat[i][j] = cov_mat[i][j]/(np.std(data.iloc[:,i],ddof=1)*np.std(data.iloc[:,j],ddof=1))
+            
+    fig, ax = plt.subplots(figsize=(10,8))
+    sns.heatmap(cor_mat, cmap="RdBu")
+    plt.xticks(rotation=90)
+    ax.set_xticklabels(data.columns)
+    ax.set_yticklabels(data.columns)
+    plt.yticks(rotation=0)
+    plt.title("Empirical Correlation Heat Map")
+    plt.tight_layout
+    plt.show()
 
     #with open(os.path.join(os.getcwd(), "data_measures.txt"), 'w') as f:
     #    f.write(data.corr().to_string())
     
+    ### plot scatter for temperature ###
     # Temp - IBH IBT
     # Season - Temp vis
     fig, ax = plt.subplots(1, 2, figsize=(14, 6))
@@ -151,15 +171,8 @@ def data_visualisation(data):
 
 def pca(data):
     ### transform data ###
-    # one hot encoding (if needed)
-
     # standardize
-
     data_pca = data.drop(["doy", "season"], axis=1)
-
-    #scaler = StandardScaler()
-    #scaler.fit(data_pca)
-    #data_pca_scaled = scaler.transform(data_pca)
     
     mean = data_pca.mean()
     std = data_pca.std(ddof=1)
@@ -173,6 +186,7 @@ def pca(data):
 
     threshold = 0.9
 
+    ### plot explained variance ###
     plt.figure()
     plt.plot(range(1, len(rho) + 1), rho, 'x-', color='red')
     plt.plot(range(1, len(rho) + 1), np.cumsum(rho), 'o-', color='blue')
@@ -184,30 +198,31 @@ def pca(data):
     plt.grid()
     plt.show()
 
+    ### transform data onto pca components ###
     V_real = V.T
     Z = data_pca_scaled @ V_real
     
-    # Plot PCA of the data (two pca components)
-    # Indices of the principal components to be plotted
-    i = 1
-    j = 4
-
-    plt.figure()
-    plt.title('Los Angeles Ozone: PCA')
-    # Z = array(Z)
-    for c in range(len(sorted(set(data["season"])))):
-        # select indices belonging to class c:
-        class_mask = data["season"] == c
-        plt.plot(Z[class_mask, i], Z[class_mask, j], 'o', alpha=.5)
-    plt.legend(["winter", "spring", "summer", "fall"])
-    plt.xlabel('PC{0}'.format(i + 1))
-    plt.ylabel('PC{0}'.format(j + 1))
-    plt.show()
+    ### Plot PCA projection ###
+    # pca component indices
+    pca_idx = [[0, 1], [1, 4]]
+    for idx in pca_idx:
+        plt.figure()
+        plt.title('Los Angeles Ozone: PCA')
+        # Z = array(Z)
+        for c in range(len(sorted(set(data["season"])))):
+            # select indices belonging to class c:
+            class_mask = data["season"] == c
+            plt.plot(Z[class_mask, idx[0]], Z[class_mask, idx[1]], 'o', alpha=.5)
+        plt.legend(["winter", "spring", "summer", "fall"])
+        plt.xlabel('PC{0}'.format(idx[0] + 1))
+        plt.ylabel('PC{0}'.format(idx[1] + 1))
+        plt.show()
     
-    #number of pca components to be analysed further
+    ### further analysis of most important pca components ###
+    # number of pca components to be analysed further
     max_pca = 5
     
-    #plot matrix scatter pca plot for max_pca components
+    # plot matrix scatter pca plot for max_pca components
     fig, ax = plt.subplots(max_pca, max_pca, figsize=(20, 10))
     plt.suptitle(f'Los Angeles Ozone: PCA for {max_pca} components')
     
@@ -224,7 +239,7 @@ def pca(data):
     plt.tight_layout()
     plt.show()
     
-    ## plot for pca contribution
+    ### plot for pca contribution ###
     fig, ax = plt.subplots(figsize=(14, 8))
 
     for i in range(max_pca):
@@ -237,11 +252,10 @@ def pca(data):
     ax.set_xticklabels(data_pca.columns, rotation=45)
     ax.set_ylabel('Loading')
     ax.set_title('PCA Component Loadings for Each Feature')
-    ax.legend()
     ax.grid(True)
     plt.show()
     
-    ### pca heatmap
+    ### pca heatmap ###
     fig, ax = plt.subplots(figsize=(14, 8))
     im = ax.imshow(V_real[:,0:max_pca], cmap="RdBu")
     ax.legend()
@@ -280,34 +294,32 @@ def main():
     data_visualisation(data)
     pca(data)
     
-    data_Y = data["season"].copy()
+    # train the first classifiers
     
-    data_X = data.drop(["doy", "season"], axis=1).copy()
+    #data_Y = data["season"].copy()
     
-    mean = data_X.mean()
-    std = data_X.std(ddof=1)
-    data_X = np.asarray((data_X - mean) / std)
+    #data_X = data.drop(["doy", "season"], axis=1).copy()
     
-    X_train, X_test, y_train, y_test = train_test_split(data_X, data_Y, test_size = 0.2, random_state=5, shuffle=True)
+    #mean = data_X.mean()
+    #std = data_X.std(ddof=1)
+    #data_X = np.asarray((data_X - mean) / std)
+    
+    #X_train, X_test, y_train, y_test = train_test_split(data_X, data_Y, test_size = 0.2, random_state=5, shuffle=True)
 
-    KNN = KNeighborsClassifier(n_neighbors = 10)
-    KNN.fit(X_train, y_train)
+    #KNN = KNeighborsClassifier(n_neighbors = 10)
+    #KNN.fit(X_train, y_train)
     
-    print(KNN.score(X_test,y_test))
+    #print(KNN.score(X_test,y_test))
     
-    DT = DecisionTreeClassifier()
-    DT.fit(X_train,y_train)
+    #DT = DecisionTreeClassifier()
+    #DT.fit(X_train,y_train)
     
-    print(DT.score(X_test,y_test))
+    #print(DT.score(X_test,y_test))
     
-    RF = RandomForestClassifier()
-    RF.fit(X_train,y_train)
+    #RF = RandomForestClassifier()
+    #RF.fit(X_train,y_train)
     
-    print(RF.score(X_test,y_test))
-
-
-
-
+    #print(RF.score(X_test,y_test))
 
 
 if __name__ == "__main__":
