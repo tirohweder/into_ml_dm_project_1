@@ -45,31 +45,7 @@ class BaselineRegression:
         self.prediction = y.mean()
         
     def predict(self, X):
-        return self.prediction
-    
-# class InnerCVDataCollection:
-#     def __init__(self, n_mlp_param, n_lm_param):
-#         self.bm_perf = np.zeros((1,1))
-#         self.mlp_perf = np.zeros((1,n_mlp_param))
-#         self.lm_perf = np.zeros((1,n_lm_param))
-        
-#     def set_bm_perf(self, error):
-#         self.bm_perf[0,0] = error
-        
-#     def set_mlp_perf(self, error, idx):
-#         self.mlp_perf[0,idx] = error
-        
-#     def set_lm_perf(self, error, idx):
-#         self.lm_perf[0,idx] = error 
-        
-#     def get_bm_perf(self):
-#         return self.bm_perf
-    
-#     def get_mlp_perf(self):
-#         return self.mlp_perf
-    
-#     def get_lm_perf(self):
-#         return self.lm_perf
+        return self.prediction*np.ones((X.shape[0],1))
     
 class InnerCVDataCollection:
     def __init__(self, n_param):
@@ -258,6 +234,14 @@ def regression_b(X_regr, y_regr):
     #define lineare regression parameters
     lm_param = [0.00001, 0.0001, 0.001, 0.01, 0.1]
     
+    #initialize lost lists
+    z_l1_bm = []
+    z_l2_bm = []
+    z_l1_mlp = []
+    z_l2_mlp = []
+    z_l1_lm = []
+    z_l2_lm = []
+
     #outer CV loop
     j=0
     for par_idx, test_idx in outer_CV.split(X_regr):
@@ -348,8 +332,8 @@ def regression_b(X_regr, y_regr):
         y_par_pred_bm = bm.predict(X_par)
         y_test_pred_bm = bm.predict(X_test)
 
-        z_l1_bm = l1_loss(y_test_pred_bm, y_test)
-        z_l2_bm = l2_loss(y_test_pred_bm, y_test)
+        z_l1_bm.append(l1_loss(y_test_pred_bm, y_test))
+        z_l2_bm.append(l2_loss(y_test_pred_bm, y_test))
         
         mse_par_bm = mse(y_par_pred_bm, y_par)
         mse_test_bm = mse(y_test_pred_bm, y_test)
@@ -359,14 +343,14 @@ def regression_b(X_regr, y_regr):
         #train best MLP of inner CV
         best_param_idx, best_param = get_best_parameters(inner_CV_list, mlp_param, 1)
         
-        mlp = MLPRegressor(hidden_layer_sizes=best_param, max_iter=2500)
+        mlp = MLPRegressor(hidden_layer_sizes=best_param, max_iter=2500, learning_rate_init=0.01)
         mlp.fit(X_par,y_par)
         
         y_par_pred_mlp = mlp.predict(X_par)
         y_test_pred_mlp = mlp.predict(X_test)
 
-        z_l1_mlp = l1_loss(y_test_pred_mlp, y_test)
-        z_l2_mlp = l2_loss(y_test_pred_mlp, y_test)
+        z_l1_mlp.append(l1_loss(y_test_pred_mlp, y_test))
+        z_l2_mlp.append(l2_loss(y_test_pred_mlp, y_test))
         
         mse_par_mlp = mse(y_par_pred_mlp, y_par)
         mse_test_mlp = mse(y_test_pred_mlp, y_test)
@@ -383,8 +367,8 @@ def regression_b(X_regr, y_regr):
         y_par_pred_lm = lm.predict(X_par)
         y_test_pred_lm = lm.predict(X_test)
 
-        z_l1_lm = l1_loss(y_test_pred_lm, y_test)
-        z_l2_lm = l2_loss(y_test_pred_lm, y_test)
+        z_l1_lm.append(l1_loss(y_test_pred_lm, y_test))
+        z_l2_lm.append(l2_loss(y_test_pred_lm, y_test))
         
         mse_par_lm = mse(y_par_pred_lm, y_par)
         mse_test_lm = mse(y_test_pred_lm, y_test)
@@ -405,6 +389,12 @@ def regression_b(X_regr, y_regr):
     
     with open(os.path.join(os.getcwd(),'regression_b_table.txt'), 'w') as f:
         f.write(table_b_df.to_string())
+
+    #setup I statistical analysis based on l2 loss
+
+    z_l2_bm = np.array(z_l2_bm)
+    z_l2_bm = np.array(z_l2_mlp)
+    z_l2_bm = np.array(z_l2_lm)
             
             
 def main():
