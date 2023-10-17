@@ -45,7 +45,7 @@ class BaselineRegression:
         self.prediction = y.mean()
         
     def predict(self, X):
-        return self.prediction*np.ones((X.shape[0],1))
+        return np.ravel(self.prediction*np.ones((X.shape[0],1)))
     
 class InnerCVDataCollection:
     def __init__(self, n_param):
@@ -114,6 +114,11 @@ def l2_loss(y_pred, y_true):
 
 def mse(y_pred, y_true):
     return l2_loss(y_pred, y_true).sum()/y_pred.shape[0]
+
+def paired_t_test(z):
+    CI = st.t.interval(1 - 0.05, len(z) - 1, loc=np.mean(z), scale=st.sem(z))  # Confidence interval
+    p = 2*st.t.cdf(-np.abs(np.mean(z)) / st.sem(z), df=len(z) - 1)  # p-value
+    return CI, p
 
 def regression_a(X_regr, y_regr):
     ### Regression part A ###
@@ -234,7 +239,7 @@ def regression_b(X_regr, y_regr):
     #define lineare regression parameters
     lm_param = [0.00001, 0.0001, 0.001, 0.01, 0.1]
     
-    #initialize lost lists
+    #initialize loss lists
     z_l1_bm = []
     z_l2_bm = []
     z_l1_mlp = []
@@ -332,8 +337,8 @@ def regression_b(X_regr, y_regr):
         y_par_pred_bm = bm.predict(X_par)
         y_test_pred_bm = bm.predict(X_test)
 
-        z_l1_bm.append(l1_loss(y_test_pred_bm, y_test))
-        z_l2_bm.append(l2_loss(y_test_pred_bm, y_test))
+        z_l1_bm.append(np.transpose(l1_loss(y_test_pred_bm, y_test)))
+        z_l2_bm.append(np.transpose(l2_loss(y_test_pred_bm, y_test)))
         
         mse_par_bm = mse(y_par_pred_bm, y_par)
         mse_test_bm = mse(y_test_pred_bm, y_test)
@@ -349,8 +354,8 @@ def regression_b(X_regr, y_regr):
         y_par_pred_mlp = mlp.predict(X_par)
         y_test_pred_mlp = mlp.predict(X_test)
 
-        z_l1_mlp.append(l1_loss(y_test_pred_mlp, y_test))
-        z_l2_mlp.append(l2_loss(y_test_pred_mlp, y_test))
+        z_l1_mlp.append(np.transpose(l1_loss(y_test_pred_mlp, y_test)))
+        z_l2_mlp.append(np.transpose(l2_loss(y_test_pred_mlp, y_test)))
         
         mse_par_mlp = mse(y_par_pred_mlp, y_par)
         mse_test_mlp = mse(y_test_pred_mlp, y_test)
@@ -367,8 +372,8 @@ def regression_b(X_regr, y_regr):
         y_par_pred_lm = lm.predict(X_par)
         y_test_pred_lm = lm.predict(X_test)
 
-        z_l1_lm.append(l1_loss(y_test_pred_lm, y_test))
-        z_l2_lm.append(l2_loss(y_test_pred_lm, y_test))
+        z_l1_lm.append(np.transpose(l1_loss(y_test_pred_lm, y_test)))
+        z_l2_lm.append(np.transpose(l2_loss(y_test_pred_lm, y_test)))
         
         mse_par_lm = mse(y_par_pred_lm, y_par)
         mse_test_lm = mse(y_test_pred_lm, y_test)
@@ -392,9 +397,24 @@ def regression_b(X_regr, y_regr):
 
     #setup I statistical analysis based on l2 loss
 
-    z_l2_bm = np.array(z_l2_bm)
-    z_l2_bm = np.array(z_l2_mlp)
-    z_l2_bm = np.array(z_l2_lm)
+    z_l2_bm = np.concatenate(z_l2_bm)
+    z_l2_mlp = np.concatenate(z_l2_mlp)
+    z_l2_lm = np.concatenate(z_l2_lm)
+
+    #Test for MLP and BM
+    z = z_l2_mlp - z_l2_bm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the MLP and BM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for MLP an LM
+    z = z_l2_mlp - z_l2_lm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the MLP and LM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for LM and BM
+    z = z_l2_lm - z_l2_bm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the LM and BM has a CI of {CI} and a p-value of {p_value}")
             
             
 def main():
