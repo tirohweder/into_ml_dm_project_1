@@ -45,31 +45,17 @@ class BaselineRegression:
         self.prediction = y.mean()
         
     def predict(self, X):
-        return self.prediction
+        return np.ravel(self.prediction*np.ones((X.shape[0],1)))
     
 class InnerCVDataCollection:
-    def __init__(self, n_mlp_param, n_lm_param):
-        self.bm_perf = np.zeros((1,1))
-        self.mlp_perf = np.zeros((1,n_mlp_param))
-        self.lm_perf = np.zeros((1,n_lm_param))
+    def __init__(self, n_param):
+        self.perf = np.zeros((1,n_param))
         
-    def set_bm_perf(self, error):
-        self.bm_perf[0,0] = error
+    def set_perf(self, error, idx):
+        self.perf[0,idx] = error
         
-    def set_mlp_perf(self, error, idx):
-        self.mlp_perf[0,idx] = error
-        
-    def set_lm_perf(self, error, idx):
-        self.lm_perf[0,idx] = error 
-        
-    def get_bm_perf(self):
-        return self.bm_perf
-    
-    def get_mlp_perf(self):
-        return self.mlp_perf
-    
-    def get_lm_perf(self):
-        return self.lm_perf
+    def get_perf(self):
+        return self.perf
     
 class OuterCVDataCollection:
     def __init__(self, K):
@@ -109,6 +95,30 @@ class OuterCVDataCollection:
     def get_lm_param_idx(self):
         return self.lm_param_idx
         
+def get_best_parameters(inner_CV_list, param, param_idx):
+    avg_sum = 0
+    for q in range(len(inner_CV_list)):
+        avg_sum = avg_sum + inner_CV_list[q][param_idx].get_perf()
+    gen_errors = avg_sum/len(inner_CV_list)
+        
+    best_param_idx = np.argmin(gen_errors)
+    best_param = param[best_param_idx]
+
+    return best_param_idx, best_param
+
+def l1_loss(y_pred, y_true):
+    return np.abs(y_true-y_pred)
+
+def l2_loss(y_pred, y_true):
+    return np.square(y_true-y_pred)
+
+def mse(y_pred, y_true):
+    return l2_loss(y_pred, y_true).sum()/y_pred.shape[0]
+
+def paired_t_test(z):
+    CI = st.t.interval(1 - 0.05, len(z) - 1, loc=np.mean(z), scale=st.sem(z))  # Confidence interval
+    p = 2*st.t.cdf(-np.abs(np.mean(z)) / st.sem(z), df=len(z) - 1)  # p-value
+    return CI, p
 
 def regression_a(X_regr, y_regr):
     ### Regression part A ###
@@ -224,11 +234,19 @@ def regression_b(X_regr, y_regr):
     outer_collector = OuterCVDataCollection(outer_K)
     
     #define MLP parameters
-    mlp_param = [(1,), (5,), (5,5,), (5,10,5,), (10,20,10,), (20,40,20,), (10,20,20,10,)]
+    mlp_param = [(1,), (5,5,), (30,20,10,), (20,40,20,), (10,20,20,10,)]
     
     #define lineare regression parameters
     lm_param = [0.00001, 0.0001, 0.001, 0.01, 0.1]
     
+    #initialize loss lists
+    z_l1_bm = []
+    z_l2_bm = []
+    z_l1_mlp = []
+    z_l2_mlp = []
+    z_l1_lm = []
+    z_l2_lm = []
+
     #outer CV loop
     j=0
     for par_idx, test_idx in outer_CV.split(X_regr):
@@ -249,7 +267,10 @@ def regression_b(X_regr, y_regr):
             X_train = standardizer.fit(X_train)
             X_val = standardizer.transform(X_val)
             
-            inner_collector = InnerCVDataCollection(len(mlp_param), len(lm_param))
+            #inner_collector = InnerCVDataCollection(len(mlp_param), len(lm_param))
+            inner_collector_bm = InnerCVDataCollection(1)
+            inner_collector_mlp = InnerCVDataCollection(len(mlp_param))
+            inner_collector_lm = InnerCVDataCollection(len(lm_param))
             
             #fit baseline model
             bm = BaselineRegression()
@@ -261,13 +282,13 @@ def regression_b(X_regr, y_regr):
             error_train_bm = np.square(y_train-y_train_pred_bm).sum()/y_train.shape[0]
             error_val_bm = np.square(y_val-y_val_pred_bm).sum()/y_val.shape[0]
             
-            inner_collector.set_bm_perf(error_val_bm)
+            inner_collector_bm.set_perf(error_val_bm,0)
             
             p=0
             for param in mlp_param:
                 #model needs to be adapted once seen in the lecture
                 #training of ann model
-                mlp = MLPRegressor(hidden_layer_sizes=param, max_iter=2500)
+                mlp = MLPRegressor(hidden_layer_sizes=param, max_iter=2500, learning_rate_init=0.01)
                 mlp.fit(X_train,y_train)
                 
                 #prediction of linear regression model
@@ -277,7 +298,7 @@ def regression_b(X_regr, y_regr):
                 error_train_mlp = np.square(y_train-y_train_pred_mlp).sum()/y_train.shape[0]
                 error_val_mlp = np.square(y_val-y_val_pred_mlp).sum()/y_val.shape[0]
                 
-                inner_collector.set_mlp_perf(error_val_mlp, p)
+                inner_collector_mlp.set_perf(error_val_mlp, p)
                 
                 p=p+1
                 
@@ -296,11 +317,11 @@ def regression_b(X_regr, y_regr):
                 error_train_lm = np.square(y_train-y_train_pred_lm).sum()/y_train.shape[0]
                 error_val_lm = np.square(y_val-y_val_pred_lm).sum()/y_val.shape[0]
                 
-                inner_collector.set_lm_perf(error_val_lm, p)
+                inner_collector_lm.set_perf(error_val_lm, p)
                 
                 p=p+1
              
-            inner_CV_list.append(inner_collector)
+            inner_CV_list.append([inner_collector_bm, inner_collector_mlp, inner_collector_lm])
             
             i=i+1
         
@@ -315,52 +336,49 @@ def regression_b(X_regr, y_regr):
         
         y_par_pred_bm = bm.predict(X_par)
         y_test_pred_bm = bm.predict(X_test)
+
+        z_l1_bm.append(np.transpose(l1_loss(y_test_pred_bm, y_test)))
+        z_l2_bm.append(np.transpose(l2_loss(y_test_pred_bm, y_test)))
         
-        error_par_bm = np.square(y_par-y_par_pred_bm).sum()/y_par.shape[0]
-        error_test_bm = np.square(y_test-y_test_pred_bm).sum()/y_test.shape[0]
+        mse_par_bm = mse(y_par_pred_bm, y_par)
+        mse_test_bm = mse(y_test_pred_bm, y_test)
         
-        outer_collector.set_bm_perf(error_test_bm, j)
+        outer_collector.set_bm_perf(mse_test_bm, j)
         
         #train best MLP of inner CV
-        mlp_sum = 0
-        for q in range(len(inner_CV_list)):
-            mlp_sum = mlp_sum + inner_CV_list[q].get_mlp_perf()
-        mlp_gen_errors = mlp_sum/len(inner_CV_list)
+        best_param_idx, best_param = get_best_parameters(inner_CV_list, mlp_param, 1)
         
-        best_param_idx = np.argmin(mlp_gen_errors)
-        best_param = mlp_param[best_param_idx]
-        
-        mlp = MLPRegressor(hidden_layer_sizes=best_param, max_iter=2500)
+        mlp = MLPRegressor(hidden_layer_sizes=best_param, max_iter=2500, learning_rate_init=0.01)
         mlp.fit(X_par,y_par)
         
         y_par_pred_mlp = mlp.predict(X_par)
         y_test_pred_mlp = mlp.predict(X_test)
+
+        z_l1_mlp.append(np.transpose(l1_loss(y_test_pred_mlp, y_test)))
+        z_l2_mlp.append(np.transpose(l2_loss(y_test_pred_mlp, y_test)))
         
-        error_par_mlp = np.square(y_par-y_par_pred_mlp).sum()/y_par.shape[0]
-        error_test_mlp = np.square(y_test-y_test_pred_mlp).sum()/y_test.shape[0]
+        mse_par_mlp = mse(y_par_pred_mlp, y_par)
+        mse_test_mlp = mse(y_test_pred_mlp, y_test)
         
-        outer_collector.set_mlp_perf(error_test_mlp, j)
+        outer_collector.set_mlp_perf(mse_test_mlp, j)
         outer_collector.set_mlp_param_idx(best_param_idx, j)
         
         #train best Linear Model of inner CV
-        lm_sum = 0
-        for q in range(len(inner_CV_list)):
-            lm_sum = lm_sum + inner_CV_list[q].get_lm_perf()
-        lm_gen_errors = lm_sum/len(inner_CV_list)
-        
-        best_param_idx = np.argmin(lm_gen_errors)
-        best_param = lm_param[best_param_idx]
+        best_param_idx, best_param = get_best_parameters(inner_CV_list, lm_param, 2)
         
         lm = Lasso(alpha=best_param)
         lm.fit(X_par,y_par)
         
         y_par_pred_lm = lm.predict(X_par)
         y_test_pred_lm = lm.predict(X_test)
+
+        z_l1_lm.append(np.transpose(l1_loss(y_test_pred_lm, y_test)))
+        z_l2_lm.append(np.transpose(l2_loss(y_test_pred_lm, y_test)))
         
-        error_par_lm = np.square(y_par-y_par_pred_lm).sum()/y_par.shape[0]
-        error_test_lm = np.square(y_test-y_test_pred_lm).sum()/y_test.shape[0]
+        mse_par_lm = mse(y_par_pred_lm, y_par)
+        mse_test_lm = mse(y_test_pred_lm, y_test)
         
-        outer_collector.set_lm_perf(error_test_lm, j)
+        outer_collector.set_lm_perf(mse_test_lm, j)
         outer_collector.set_lm_param_idx(best_param_idx, j)
 
         j=j+1
@@ -376,6 +394,27 @@ def regression_b(X_regr, y_regr):
     
     with open(os.path.join(os.getcwd(),'regression_b_table.txt'), 'w') as f:
         f.write(table_b_df.to_string())
+
+    #setup I statistical analysis based on l2 loss
+
+    z_l2_bm = np.concatenate(z_l2_bm)
+    z_l2_mlp = np.concatenate(z_l2_mlp)
+    z_l2_lm = np.concatenate(z_l2_lm)
+
+    #Test for MLP and BM
+    z = z_l2_mlp - z_l2_bm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the MLP and BM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for MLP an LM
+    z = z_l2_mlp - z_l2_lm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the MLP and LM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for LM and BM
+    z = z_l2_lm - z_l2_bm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the LM and BM has a CI of {CI} and a p-value of {p_value}")
             
             
 def main():
