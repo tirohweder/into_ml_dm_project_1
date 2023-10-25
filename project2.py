@@ -46,7 +46,32 @@ class BaselineRegression:
         
     def predict(self, X):
         return np.ravel(self.prediction*np.ones((X.shape[0],1)))
-    
+
+class L2RegularizedLinearRegression:
+    def __init__(self, lambda_, bias):
+        self.bias = bias
+        self.lambda_ = lambda_
+
+    def fit(self, X, y):
+        if self.bias == True:
+            X = np.concatenate((np.ones((X.shape[0],1)),X),1)
+            lambdaI = self.lambda_ * np.eye(X.shape[1])
+            lambdaI[0,0] = 0
+        elif self.bias == False:
+            lambdaI = self.lambda_ * np.eye(X.shape[1])
+
+        self.w = np.linalg.solve(X.T @ X + lambdaI, X.T @ y)
+
+
+    def predict(self, X):
+        if self.bias == True:
+            X = np.concatenate((np.ones((X.shape[0],1)),X),1)
+
+        return X @ self.w
+
+    def get_weights(self):
+        return self.w
+
 class InnerCVDataCollection:
     def __init__(self, n_param):
         self.perf = np.zeros((1,n_param))
@@ -128,7 +153,8 @@ def regression_a(X_regr, y_regr):
     CV = KFold(n_splits=K, shuffle=True, random_state=44)
     
     #list of parameters for regression model
-    reg_param = [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1]
+    reg_param = [0, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1]
+    bias = False
     
     #array to record all errors
     error_mat = np.empty((K,len(reg_param)))
@@ -150,7 +176,8 @@ def regression_a(X_regr, y_regr):
         for param in reg_param:
             #model needs to be adapted once seen in the lecture
             #training of linear regression model
-            lm = Lasso(alpha=param)
+            #lm = Ridge(alpha=param)
+            lm = L2RegularizedLinearRegression(bias=bias, lambda_ = param)
             lm.fit(X_train,y_train)
             
             #prediction of linear regression model
@@ -199,9 +226,11 @@ def regression_a(X_regr, y_regr):
         
         #model needs to be adapted once seen in the lecture
         #training of linear regression model
-        lm = Lasso(alpha=np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model]))
+        #lm = Lasso(alpha=np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model]))
+        lm = L2RegularizedLinearRegression(bias=bias,lambda_=np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model]))
         lm.fit(X_train,y_train)
-        coef_list.append(lm.coef_)  
+        #coef_list.append(lm.coef_)  
+        coef_list.append(lm.get_weights())
     
     #calculate mean of coefficients
     coef_array = np.asarray(coef_list)
@@ -211,10 +240,13 @@ def regression_a(X_regr, y_regr):
 
     #bar plot for the mean coefficients w.r.t the features
     plt.figure()
-    plt.barh(np.asarray(X_regr.columns), coef_mean.flatten())
-    plt.title('Mean Coefficients of Best Linear Regression Model');
-    plt.xlabel('mean coefficient');
-    plt.ylabel('feature');
+    if bias == False:
+        plt.barh(np.asarray(X_regr.columns), coef_mean.flatten())
+    else:
+        plt.barh(np.concatenate((["bias"],np.asarray(X_regr.columns)),0), coef_mean.flatten())
+    plt.title('Mean Coefficients of Best Linear Regression Model')
+    plt.xlabel('mean coefficient')
+    plt.ylabel('feature')
     plt.show()
     
 def regression_b(X_regr, y_regr):
@@ -450,7 +482,7 @@ def main():
     
     regression_a(X_regr, y_regr)
     
-    regression_b(X_regr, y_regr)
+    #regression_b(X_regr, y_regr)
         
     
     
