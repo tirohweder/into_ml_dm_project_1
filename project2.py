@@ -153,11 +153,12 @@ def regression_a(X_regr, y_regr):
     CV = KFold(n_splits=K, shuffle=True, random_state=44)
     
     #list of parameters for regression model
-    reg_param = [0, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1]
-    bias = False
+    reg_param = [0, 10**-15, 10**-12, 10**-9, 10**-6, 10**-3, 10**-2, 0.1, 1]
+    bias = True
     
     #array to record all errors
     error_mat = np.empty((K,len(reg_param)))
+    error_train_mat = np.empty((K,len(reg_param)))
     
     #CV loop
     j = 0
@@ -176,7 +177,6 @@ def regression_a(X_regr, y_regr):
         for param in reg_param:
             #model needs to be adapted once seen in the lecture
             #training of linear regression model
-            #lm = Ridge(alpha=param)
             lm = L2RegularizedLinearRegression(bias=bias, lambda_ = param)
             lm.fit(X_train,y_train)
             
@@ -188,6 +188,7 @@ def regression_a(X_regr, y_regr):
             error_train = np.square(y_train-y_pred_train).sum()/y_train.shape[0]
             error_test = np.square(y_test-y_pred_test).sum()/y_test.shape[0]
             
+            error_train_mat[j,i] = error_train
             error_mat[j,i] = error_test
             
             i = i+1
@@ -198,18 +199,26 @@ def regression_a(X_regr, y_regr):
     gen_error_mat = np.empty((1,len(reg_param)))
     for l in range(error_mat.shape[1]):
         gen_error_mat[0,l] = error_mat[:,l].mean()
-    
-    #plot the generalization error w.r.t the regularization parameter
-    plt.figure()
-    plt.plot(np.asarray(reg_param).reshape(1,len(reg_param)),gen_error_mat, "bo")
-    plt.title('Generalization Error as a function of the regularization parameter');
-    plt.xlabel('regularization parameter');
-    plt.ylabel('Generalization error');
-    plt.xscale("log")
-    plt.show()
+
+    #calculation of average training error
+    avg_train_error_mat = np.empty((1,len(reg_param)))
+    for l in range(error_train_mat.shape[1]):
+        avg_train_error_mat[0,l] = error_train_mat[:,l].mean()
     
     #determine best model (according to generalization error)
     best_model = np.argmin(gen_error_mat, axis=1)
+    print(f"The best model parameter lambda is: {np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model])}")
+
+    #plot the generalization error w.r.t the regularization parameter
+    plt.figure()
+    plt.plot(np.asarray(reg_param).ravel(), avg_train_error_mat.ravel(), "r.-", label="Avg. Training Error")
+    plt.plot(np.asarray(reg_param).ravel(), gen_error_mat.ravel(), "b.-", label="Generalization Error")
+    plt.title('Generalization Error as a function of the regularization parameter')
+    plt.xlabel('regularization parameter')
+    plt.ylabel('Generalization error')
+    plt.xscale("log")
+    plt.legend()
+    plt.show()
     
     #redo CV for the best model to generate avg. of coefficients
     coef_list = []
@@ -226,10 +235,8 @@ def regression_a(X_regr, y_regr):
         
         #model needs to be adapted once seen in the lecture
         #training of linear regression model
-        #lm = Lasso(alpha=np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model]))
         lm = L2RegularizedLinearRegression(bias=bias,lambda_=np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model]))
         lm.fit(X_train,y_train)
-        #coef_list.append(lm.coef_)  
         coef_list.append(lm.get_weights())
     
     #calculate mean of coefficients
