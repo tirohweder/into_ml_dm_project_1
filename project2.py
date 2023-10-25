@@ -74,7 +74,7 @@ class L2RegularizedLinearRegression:
         return self.w
 
 class ANNRegression:
-    def __init__(self, n_hidden_units, n_input_units):
+    def __init__(self, n_hidden_units, n_input_units, n_replicates=1, max_iter=10**4):
         self.model = lambda: torch.nn.Sequential(
                     torch.nn.Linear(n_input_units, n_hidden_units), 
                     #torch.nn.Tanh(), 
@@ -82,14 +82,16 @@ class ANNRegression:
                     torch.nn.Linear(n_hidden_units, 1), 
                     )
         self.loss_fct = torch.nn.MSELoss()
+        self.n_replicates = n_replicates
+        self.max_iter = max_iter
 
-    def fit(self, X, y, n_replicates=1, max_iter=10**4):
+    def fit(self, X, y):
         X = torch.Tensor(X)
         y = torch.Tensor(y.reshape((y.shape[0],1)))
         tolerance = 10**-9
         best_final_loss = 10**100
-        for r in range(n_replicates):
-            print('\n\tReplicate: {}/{}'.format(r+1, n_replicates))
+        for r in range(self.n_replicates):
+            print('\n\tReplicate: {}/{}'.format(r+1, self.n_replicates))
             net = self.model()
 
             torch.nn.init.xavier_uniform_(net[0].weight)
@@ -100,7 +102,7 @@ class ANNRegression:
             print('\t\t{}\t{}\t\t{}'.format('Iter', 'Loss','Rel. loss'))
             learning_curve = []
             old_loss = 1e6
-            for i in range(max_iter):
+            for i in range(self.max_iter):
                 y_est = net(X)
                 loss = self.loss_fct(y_est, y)
                 loss_value = loss.data.numpy()
@@ -134,7 +136,6 @@ class ANNRegression:
     def get_learning_curve(self):
         return self.learning_curve
 
-
 class InnerCVDataCollection:
     def __init__(self, n_param):
         self.perf = np.zeros((1,n_param))
@@ -148,8 +149,6 @@ class InnerCVDataCollection:
 class OuterCVDataCollection:
     def __init__(self, K):
         self.bm_perf = np.zeros((1,K))
-        self.mlp_perf = np.zeros((1,K))
-        self.mlp_param_idx = np.zeros((1,K))
         self.ann_perf = np.zeros((1,K))
         self.ann_param_idx = np.zeros((1,K))
         self.lm_perf = np.zeros((1,K))
@@ -157,12 +156,6 @@ class OuterCVDataCollection:
         
     def set_bm_perf(self, error, idx):
         self.bm_perf[0,idx] = error
-        
-    def set_mlp_perf(self, error, idx):
-        self.mlp_perf[0,idx] = error
-        
-    def set_mlp_param_idx(self, param_idx, idx):
-        self.mlp_param_idx[0,idx] = param_idx
 
     def set_ann_perf(self, error, idx):
         self.ann_perf[0,idx] = error
@@ -178,12 +171,6 @@ class OuterCVDataCollection:
         
     def get_bm_perf(self):
         return self.bm_perf
-    
-    def get_mlp_perf(self):
-        return self.mlp_perf
-    
-    def get_mlp_param_idx(self):
-        return self.mlp_param_idx
     
     def get_ann_perf(self):
         return self.ann_perf
@@ -221,6 +208,63 @@ def paired_t_test(z):
     CI = st.t.interval(1 - 0.05, len(z) - 1, loc=np.mean(z), scale=st.sem(z))  # Confidence interval
     p = 2*st.t.cdf(-np.abs(np.mean(z)) / st.sem(z), df=len(z) - 1)  # p-value
     return CI, p
+
+def train_ANN(collector, param_list, X_train, y_train, X_val, y_val):
+    p=0
+    for param in param_list:
+        #model needs to be adapted once seen in the lecture
+        #training of ann model
+        model = ANNRegression(n_hidden_units=param, n_input_units=X_train.shape[1], n_replicates=2, max_iter=15*10**4)
+        
+        y_train_pred, y_val_pred, error_train, error_val = train_reg_B(model, X_train, y_train, X_val, y_val)
+                
+        collector.set_perf(error_val, p)
+                
+        p=p+1
+    
+    return collector
+
+def train_LM(collector, param_list, bias,  X_train, y_train, X_val, y_val):
+    p=0
+    for param in param_list:
+        #model needs to be adapted once seen in the lecture
+        #training of ann model
+        model = L2RegularizedLinearRegression(bias=bias, lambda_ = param)
+        
+        y_train_pred, y_val_pred, error_train, error_val = train_reg_B(model, X_train, y_train, X_val, y_val)
+                
+        collector.set_perf(error_val, p)
+                
+        p=p+1
+    
+    return collector
+
+def train_BM(collector, param_list, X_train, y_train, X_val, y_val):
+    p=0
+    for param in param_list:
+        #model needs to be adapted once seen in the lecture
+        #training of ann model
+        model = BaselineRegression()
+        
+        y_train_pred, y_val_pred, error_train, error_val = train_reg_B(model, X_train, y_train, X_val, y_val)
+                
+        collector.set_perf(error_val, 0)
+                
+        p=p+1
+    
+    return collector
+
+def train_reg_B(model, X_train, y_train, X_val, y_val):
+    model.fit(X_train, y_train)
+                
+    y_train_pred = model.predict(X_train)
+    y_val_pred = model.predict(X_val)
+                
+    error_train = np.square(y_train-y_train_pred).sum()/y_train.shape[0]
+    error_val = np.square(y_val-y_val_pred).sum()/y_val.shape[0]
+    return y_train_pred, y_val_pred, error_train, error_val
+
+### subtasks of the project ###
 
 def regression_a(X_regr, y_regr):
     ### Regression part A ###
@@ -334,10 +378,10 @@ def regression_b(X_regr, y_regr):
     ### Regression part A ###
     
     #initialize CV
-    outer_K = 2
+    outer_K = 10
     outer_CV = KFold(n_splits=outer_K, shuffle=True, random_state=44)
     
-    inner_K = 2
+    inner_K = 10
     inner_CV = KFold(n_splits=inner_K, shuffle=True, random_state=44)
     
     #create list of arrays to store all inner CV data
@@ -346,8 +390,7 @@ def regression_b(X_regr, y_regr):
     #create outer collector to store outer CV data
     outer_collector = OuterCVDataCollection(outer_K)
     
-    #define MLP parameters
-    mlp_param = [(1,), (10,), (20,), (50,)]
+    #define ANN parameters
     ann_param = [1, 10, 20, 50]
     
     #define lineare regression parameters
@@ -355,14 +398,9 @@ def regression_b(X_regr, y_regr):
     bias = True
     
     #initialize loss lists
-    z_l1_bm = []
-    z_l2_bm = []
-    z_l1_mlp = []
-    z_l2_mlp = []
-    z_l1_lm = []
-    z_l2_lm = []
-    z_l1_ann = []
-    z_l2_ann = []
+    z_l1_bm, z_l2_bm = [], []
+    z_l1_lm, z_l2_lm = [], []
+    z_l1_ann, z_l2_ann = [], []
 
     #outer CV loop
     j=0
@@ -388,78 +426,16 @@ def regression_b(X_regr, y_regr):
             
             #inner_collector = InnerCVDataCollection(len(mlp_param), len(lm_param))
             inner_collector_bm = InnerCVDataCollection(1)
-            inner_collector_mlp = InnerCVDataCollection(len(mlp_param))
             inner_collector_ann = InnerCVDataCollection(len(ann_param))
             inner_collector_lm = InnerCVDataCollection(len(lm_param))
-            
-            #fit baseline model
-            bm = BaselineRegression()
-            bm.fit(X_train,y_train)
-            
-            y_train_pred_bm = bm.predict(X_train)
-            y_val_pred_bm = bm.predict(X_val)
-            
-            error_train_bm = np.square(y_train-y_train_pred_bm).sum()/y_train.shape[0]
-            error_val_bm = np.square(y_val-y_val_pred_bm).sum()/y_val.shape[0]
-            
-            inner_collector_bm.set_perf(error_val_bm,0)
-            
-            p=0
-            for param in mlp_param:
-                #model needs to be adapted once seen in the lecture
-                #training of ann model
-                mlp = MLPRegressor(hidden_layer_sizes=param, max_iter=2500, learning_rate_init=0.01)
-                mlp.fit(X_train,y_train)
-                
-                #prediction of linear regression model
-                y_train_pred_mlp = mlp.predict(X_train)
-                y_val_pred_mlp = mlp.predict(X_val)
-                
-                error_train_mlp = np.square(y_train-y_train_pred_mlp).sum()/y_train.shape[0]
-                error_val_mlp = np.square(y_val-y_val_pred_mlp).sum()/y_val.shape[0]
-                
-                inner_collector_mlp.set_perf(error_val_mlp, p)
-                
-                p=p+1
 
-            p=0
-            for param in ann_param:
-                #model needs to be adapted once seen in the lecture
-                #training of ann model
-                ann = ANNRegression(n_hidden_units=param, n_input_units=X_train.shape[1])
-                ann.fit(X_train, y_train, n_replicates=2)
-                
-                #prediction of linear regression model
-                y_train_pred_ann = ann.predict(X_train)
-                y_val_pred_ann = ann.predict(X_val)
-                
-                error_train_ann = np.square(y_train-y_train_pred_ann).sum()/y_train.shape[0]
-                error_val_ann = np.square(y_val-y_val_pred_ann).sum()/y_val.shape[0]
-                
-                inner_collector_ann.set_perf(error_val_ann, p)
-                
-                p=p+1
-                
-            p=0    
-            for param in lm_param:
-                #model needs to be adapted once seen in the lecture
-                #training of linear regression model
-                lm = lm = L2RegularizedLinearRegression(bias=bias, lambda_ = param)
-                lm.fit(X_train,y_train)
-                
-                #prediction of linear regression model
-                y_train_pred_lm = lm.predict(X_train)
-                y_val_pred_lm = lm.predict(X_val)
-                
-                #error calculation
-                error_train_lm = np.square(y_train-y_train_pred_lm).sum()/y_train.shape[0]
-                error_val_lm = np.square(y_val-y_val_pred_lm).sum()/y_val.shape[0]
-                
-                inner_collector_lm.set_perf(error_val_lm, p)
-                
-                p=p+1
+            inner_collector_bm = train_BM(inner_collector_bm, [1], X_train, y_train, X_val, y_val)
+
+            inner_collector_ann = train_ANN(inner_collector_ann, ann_param, X_train, y_train, X_val, y_val)
+
+            inner_collector_lm = train_LM(inner_collector_lm, lm_param, bias, X_train, y_train, X_val, y_val)
              
-            inner_CV_list.append([inner_collector_bm, inner_collector_mlp, inner_collector_lm, inner_collector_ann])
+            inner_CV_list.append([inner_collector_bm, inner_collector_lm, inner_collector_ann])
             
             i=i+1
         
@@ -482,30 +458,12 @@ def regression_b(X_regr, y_regr):
         mse_test_bm = mse(y_test_pred_bm, y_test)
         
         outer_collector.set_bm_perf(mse_test_bm, j)
-        
-        #train best MLP of inner CV
-        best_param_idx, best_param = get_best_parameters(inner_CV_list, mlp_param, 1)
-        
-        mlp = MLPRegressor(hidden_layer_sizes=best_param, max_iter=2500, learning_rate_init=0.01)
-        mlp.fit(X_par,y_par)
-        
-        y_par_pred_mlp = mlp.predict(X_par)
-        y_test_pred_mlp = mlp.predict(X_test)
-
-        z_l1_mlp.append(np.transpose(l1_loss(y_test_pred_mlp, y_test)))
-        z_l2_mlp.append(np.transpose(l2_loss(y_test_pred_mlp, y_test)))
-        
-        mse_par_mlp = mse(y_par_pred_mlp, y_par)
-        mse_test_mlp = mse(y_test_pred_mlp, y_test)
-        
-        outer_collector.set_mlp_perf(mse_test_mlp, j)
-        outer_collector.set_mlp_param_idx(best_param_idx, j)
 
         #train best ANN of inner CV
-        best_param_idx, best_param = get_best_parameters(inner_CV_list, ann_param, 3)
+        best_param_idx, best_param = get_best_parameters(inner_CV_list, ann_param, 2)
         
-        ann = ANNRegression(n_hidden_units=best_param, n_input_units=X_par.shape[1])
-        ann.fit(X_par,y_par,n_replicates=2)
+        ann = ANNRegression(n_hidden_units=best_param, n_input_units=X_par.shape[1], n_replicates=2)
+        ann.fit(X_par,y_par)
         
         y_par_pred_ann = ann.predict(X_par)
         y_test_pred_ann = ann.predict(X_test)
@@ -520,9 +478,9 @@ def regression_b(X_regr, y_regr):
         outer_collector.set_ann_param_idx(best_param_idx, j)
         
         #train best Linear Model of inner CV
-        best_param_idx, best_param = get_best_parameters(inner_CV_list, lm_param, 2)
+        best_param_idx, best_param = get_best_parameters(inner_CV_list, lm_param, 1)
         
-        lm = lm = L2RegularizedLinearRegression(bias=bias, lambda_ = param)
+        lm = lm = L2RegularizedLinearRegression(bias=bias, lambda_ = best_param)
         lm.fit(X_par,y_par)
         
         y_par_pred_lm = lm.predict(X_par)
@@ -540,10 +498,8 @@ def regression_b(X_regr, y_regr):
         j=j+1
     
     #create summarization table for the outer CV loop
-    table_b_df = pd.DataFrame(columns=["MLP_param", "MLP_error", "ANN_param", "ANN_error", "LM_param", "LM_error", "BM_error"], index=range(outer_K))       
+    table_b_df = pd.DataFrame(columns=["ANN_param", "ANN_error", "LM_param", "LM_error", "BM_error"], index=range(outer_K))       
     for r in range(outer_K):
-        table_b_df["MLP_param"][r] = mlp_param[int(outer_collector.get_mlp_param_idx()[0,r])]
-        table_b_df["MLP_error"][r] = outer_collector.get_mlp_perf()[0,r]
         table_b_df["ANN_param"][r] = ann_param[int(outer_collector.get_ann_param_idx()[0,r])]
         table_b_df["ANN_error"][r] = outer_collector.get_ann_perf()[0,r]
         table_b_df["LM_param"][r] = lm_param[int(outer_collector.get_lm_param_idx()[0,r])]
@@ -556,19 +512,8 @@ def regression_b(X_regr, y_regr):
     #setup I statistical analysis based on l2 loss
 
     z_l2_bm = np.concatenate(z_l2_bm)
-    z_l2_mlp = np.concatenate(z_l2_mlp)
     z_l2_lm = np.concatenate(z_l2_lm)
     z_l2_ann = np.concatenate(z_l2_ann)
-
-    #Test for MLP and BM
-    z = z_l2_mlp - z_l2_bm
-    CI, p_value = paired_t_test(z)
-    print(f"The statistical test for the MLP and BM has a CI of {CI} and a p-value of {p_value}")
-
-    #Test for MLP an LM
-    z = z_l2_mlp - z_l2_lm
-    CI, p_value = paired_t_test(z)
-    print(f"The statistical test for the MLP and LM has a CI of {CI} and a p-value of {p_value}")
 
     #Test for ANN and BM
     z = z_l2_ann - z_l2_bm
