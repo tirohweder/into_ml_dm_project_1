@@ -17,6 +17,7 @@ from sklearn.neighbors import KNeighborsClassifier
 
 from sklearn.linear_model import Ridge, Lasso, LinearRegression, ElasticNet
 from sklearn.neural_network import MLPRegressor
+import torch
 
 from scipy.stats import norm
 warnings.filterwarnings("ignore", category=matplotlib.MatplotlibDeprecationWarning)
@@ -72,6 +73,68 @@ class L2RegularizedLinearRegression:
     def get_weights(self):
         return self.w
 
+class ANNRegression:
+    def __init__(self, n_hidden_units, n_input_units):
+        self.model = lambda: torch.nn.Sequential(
+                    torch.nn.Linear(n_input_units, n_hidden_units), 
+                    #torch.nn.Tanh(), 
+                    torch.nn.ReLU(),
+                    torch.nn.Linear(n_hidden_units, 1), 
+                    )
+        self.loss_fct = torch.nn.MSELoss()
+
+    def fit(self, X, y, n_replicates=1, max_iter=10**4):
+        X = torch.Tensor(X)
+        y = torch.Tensor(y.reshape((y.shape[0],1)))
+        tolerance = 10**-9
+        best_final_loss = 10**100
+        for r in range(n_replicates):
+            print('\n\tReplicate: {}/{}'.format(r+1, n_replicates))
+            net = self.model()
+
+            torch.nn.init.xavier_uniform_(net[0].weight)
+            torch.nn.init.xavier_uniform_(net[2].weight)
+
+            optimizer = torch.optim.Adam(net.parameters())
+
+            print('\t\t{}\t{}\t\t{}'.format('Iter', 'Loss','Rel. loss'))
+            learning_curve = []
+            old_loss = 1e6
+            for i in range(max_iter):
+                y_est = net(X)
+                loss = self.loss_fct(y_est, y)
+                loss_value = loss.data.numpy()
+                learning_curve.append(loss_value)
+
+                p_delta_loss = np.abs(loss_value-old_loss)/old_loss
+                if p_delta_loss < tolerance:
+                    break
+                old_loss = loss_value
+
+                if (i != 0) & ((i+1) % 1000 == 0):
+                    print_str = '\t\t' + str(i+1) + '\t' + str(loss_value) + '\t' + str(p_delta_loss)
+                    print(print_str)
+
+                optimizer.zero_grad(); loss.backward(); optimizer.step()
+
+            print('\t\tFinal loss:')
+            print('\t\t' + str(i+1) + '\t' + str(loss_value) + '\t' + str(p_delta_loss))
+
+            if loss_value < best_final_loss:
+                self.net = net
+                self.loss = loss_value
+                self.learning_curve = learning_curve
+
+    def predict(self, X):
+        X = torch.Tensor(X)
+
+        y = self.net(X)
+        return y.data.numpy().ravel()
+    
+    def get_learning_curve(self):
+        return self.learning_curve
+
+
 class InnerCVDataCollection:
     def __init__(self, n_param):
         self.perf = np.zeros((1,n_param))
@@ -87,6 +150,8 @@ class OuterCVDataCollection:
         self.bm_perf = np.zeros((1,K))
         self.mlp_perf = np.zeros((1,K))
         self.mlp_param_idx = np.zeros((1,K))
+        self.ann_perf = np.zeros((1,K))
+        self.ann_param_idx = np.zeros((1,K))
         self.lm_perf = np.zeros((1,K))
         self.lm_param_idx = np.zeros((1,K))
         
@@ -98,6 +163,12 @@ class OuterCVDataCollection:
         
     def set_mlp_param_idx(self, param_idx, idx):
         self.mlp_param_idx[0,idx] = param_idx
+
+    def set_ann_perf(self, error, idx):
+        self.ann_perf[0,idx] = error
+        
+    def set_ann_param_idx(self, param_idx, idx):
+        self.ann_param_idx[0,idx] = param_idx
         
     def set_lm_perf(self, error, idx):
         self.lm_perf[0,idx] = error
@@ -113,6 +184,12 @@ class OuterCVDataCollection:
     
     def get_mlp_param_idx(self):
         return self.mlp_param_idx
+    
+    def get_ann_perf(self):
+        return self.ann_perf
+    
+    def get_ann_param_idx(self):
+        return self.ann_param_idx
     
     def get_lm_perf(self):
         return self.lm_perf
@@ -257,10 +334,10 @@ def regression_b(X_regr, y_regr):
     ### Regression part A ###
     
     #initialize CV
-    outer_K = 10
+    outer_K = 2
     outer_CV = KFold(n_splits=outer_K, shuffle=True, random_state=44)
     
-    inner_K = 10
+    inner_K = 2
     inner_CV = KFold(n_splits=inner_K, shuffle=True, random_state=44)
     
     #create list of arrays to store all inner CV data
@@ -270,10 +347,12 @@ def regression_b(X_regr, y_regr):
     outer_collector = OuterCVDataCollection(outer_K)
     
     #define MLP parameters
-    mlp_param = [(1,), (5,5,), (30,20,10,), (20,40,20,), (10,20,20,10,)]
+    mlp_param = [(1,), (10,), (20,), (50,)]
+    ann_param = [1, 10, 20, 50]
     
     #define lineare regression parameters
-    lm_param = [0.00001, 0.0001, 0.001, 0.01, 0.1]
+    lm_param = [10**-7, 10**-6, 10**-5, 10**-4, 10**-3]
+    bias = True
     
     #initialize loss lists
     z_l1_bm = []
@@ -282,10 +361,13 @@ def regression_b(X_regr, y_regr):
     z_l2_mlp = []
     z_l1_lm = []
     z_l2_lm = []
+    z_l1_ann = []
+    z_l2_ann = []
 
     #outer CV loop
     j=0
     for par_idx, test_idx in outer_CV.split(X_regr):
+        print(f"Outer Crossvalidation Loop {j+1}")
         #initialization of training ad test data for the split
         X_par, y_par = X_regr.values[par_idx,:], y_regr.values[par_idx]
         X_test, y_test = X_regr.values[test_idx,:], y_regr.values[test_idx]
@@ -293,6 +375,7 @@ def regression_b(X_regr, y_regr):
         #inner CV loop
         i=0
         for train_idx, val_idx in inner_CV.split(X_par):
+            print(f"Inner Crossvalidation Loop {i+1}")
             #initialization of training ad test data for the split
             X_train, y_train = X_par[train_idx,:], y_par[train_idx]
             X_val, y_val = X_par[val_idx,:], y_par[val_idx]
@@ -306,6 +389,7 @@ def regression_b(X_regr, y_regr):
             #inner_collector = InnerCVDataCollection(len(mlp_param), len(lm_param))
             inner_collector_bm = InnerCVDataCollection(1)
             inner_collector_mlp = InnerCVDataCollection(len(mlp_param))
+            inner_collector_ann = InnerCVDataCollection(len(ann_param))
             inner_collector_lm = InnerCVDataCollection(len(lm_param))
             
             #fit baseline model
@@ -337,12 +421,30 @@ def regression_b(X_regr, y_regr):
                 inner_collector_mlp.set_perf(error_val_mlp, p)
                 
                 p=p+1
+
+            p=0
+            for param in ann_param:
+                #model needs to be adapted once seen in the lecture
+                #training of ann model
+                ann = ANNRegression(n_hidden_units=param, n_input_units=X_train.shape[1])
+                ann.fit(X_train, y_train, n_replicates=2)
+                
+                #prediction of linear regression model
+                y_train_pred_ann = ann.predict(X_train)
+                y_val_pred_ann = ann.predict(X_val)
+                
+                error_train_ann = np.square(y_train-y_train_pred_ann).sum()/y_train.shape[0]
+                error_val_ann = np.square(y_val-y_val_pred_ann).sum()/y_val.shape[0]
+                
+                inner_collector_ann.set_perf(error_val_ann, p)
+                
+                p=p+1
                 
             p=0    
             for param in lm_param:
                 #model needs to be adapted once seen in the lecture
                 #training of linear regression model
-                lm = Lasso(alpha=param)
+                lm = lm = L2RegularizedLinearRegression(bias=bias, lambda_ = param)
                 lm.fit(X_train,y_train)
                 
                 #prediction of linear regression model
@@ -357,7 +459,7 @@ def regression_b(X_regr, y_regr):
                 
                 p=p+1
              
-            inner_CV_list.append([inner_collector_bm, inner_collector_mlp, inner_collector_lm])
+            inner_CV_list.append([inner_collector_bm, inner_collector_mlp, inner_collector_lm, inner_collector_ann])
             
             i=i+1
         
@@ -398,11 +500,29 @@ def regression_b(X_regr, y_regr):
         
         outer_collector.set_mlp_perf(mse_test_mlp, j)
         outer_collector.set_mlp_param_idx(best_param_idx, j)
+
+        #train best ANN of inner CV
+        best_param_idx, best_param = get_best_parameters(inner_CV_list, ann_param, 3)
+        
+        ann = ANNRegression(n_hidden_units=best_param, n_input_units=X_par.shape[1])
+        ann.fit(X_par,y_par,n_replicates=2)
+        
+        y_par_pred_ann = ann.predict(X_par)
+        y_test_pred_ann = ann.predict(X_test)
+
+        z_l1_ann.append(np.transpose(l1_loss(y_test_pred_ann, y_test)))
+        z_l2_ann.append(np.transpose(l2_loss(y_test_pred_ann, y_test)))
+        
+        mse_par_ann = mse(y_par_pred_ann, y_par)
+        mse_test_ann = mse(y_test_pred_ann, y_test)
+        
+        outer_collector.set_ann_perf(mse_test_ann, j)
+        outer_collector.set_ann_param_idx(best_param_idx, j)
         
         #train best Linear Model of inner CV
         best_param_idx, best_param = get_best_parameters(inner_CV_list, lm_param, 2)
         
-        lm = Lasso(alpha=best_param)
+        lm = lm = L2RegularizedLinearRegression(bias=bias, lambda_ = param)
         lm.fit(X_par,y_par)
         
         y_par_pred_lm = lm.predict(X_par)
@@ -420,10 +540,12 @@ def regression_b(X_regr, y_regr):
         j=j+1
     
     #create summarization table for the outer CV loop
-    table_b_df = pd.DataFrame(columns=["ANN_param", "ANN_error", "LM_param", "LM_error", "BM_error"], index=range(outer_K))       
+    table_b_df = pd.DataFrame(columns=["MLP_param", "MLP_error", "ANN_param", "ANN_error", "LM_param", "LM_error", "BM_error"], index=range(outer_K))       
     for r in range(outer_K):
-        table_b_df["ANN_param"][r] = mlp_param[int(outer_collector.get_mlp_param_idx()[0,r])]
-        table_b_df["ANN_error"][r] = outer_collector.get_mlp_perf()[0,r]
+        table_b_df["MLP_param"][r] = mlp_param[int(outer_collector.get_mlp_param_idx()[0,r])]
+        table_b_df["MLP_error"][r] = outer_collector.get_mlp_perf()[0,r]
+        table_b_df["ANN_param"][r] = ann_param[int(outer_collector.get_ann_param_idx()[0,r])]
+        table_b_df["ANN_error"][r] = outer_collector.get_ann_perf()[0,r]
         table_b_df["LM_param"][r] = lm_param[int(outer_collector.get_lm_param_idx()[0,r])]
         table_b_df["LM_error"][r] = outer_collector.get_lm_perf()[0,r]
         table_b_df["BM_error"][r] = outer_collector.get_bm_perf()[0,r]
@@ -436,6 +558,7 @@ def regression_b(X_regr, y_regr):
     z_l2_bm = np.concatenate(z_l2_bm)
     z_l2_mlp = np.concatenate(z_l2_mlp)
     z_l2_lm = np.concatenate(z_l2_lm)
+    z_l2_ann = np.concatenate(z_l2_ann)
 
     #Test for MLP and BM
     z = z_l2_mlp - z_l2_bm
@@ -446,6 +569,16 @@ def regression_b(X_regr, y_regr):
     z = z_l2_mlp - z_l2_lm
     CI, p_value = paired_t_test(z)
     print(f"The statistical test for the MLP and LM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for ANN and BM
+    z = z_l2_ann - z_l2_bm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the ANN and BM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for ANN an LM
+    z = z_l2_ann - z_l2_lm
+    CI, p_value = paired_t_test(z)
+    print(f"The statistical test for the ANN and LM has a CI of {CI} and a p-value of {p_value}")
 
     #Test for LM and BM
     z = z_l2_lm - z_l2_bm
@@ -486,7 +619,7 @@ def main():
     
     regression_a(X_regr, y_regr)
     
-    #regression_b(X_regr, y_regr)
+    regression_b(X_regr, y_regr)
         
     
     
