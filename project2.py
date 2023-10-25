@@ -159,6 +159,9 @@ def regression_a(X_regr, y_regr):
     #array to record all errors
     error_mat = np.empty((K,len(reg_param)))
     error_train_mat = np.empty((K,len(reg_param)))
+
+    #array to record all weights
+    weight_mat = []
     
     #CV loop
     j = 0
@@ -173,6 +176,8 @@ def regression_a(X_regr, y_regr):
         X_train = standardizer.fit(X_train)
         X_test = standardizer.transform(X_test)
         
+        weight_list = []
+
         i = 0
         for param in reg_param:
             #model needs to be adapted once seen in the lecture
@@ -190,11 +195,16 @@ def regression_a(X_regr, y_regr):
             
             error_train_mat[j,i] = error_train
             error_mat[j,i] = error_test
+
+            weight_list.append(lm.get_weights())
             
             i = i+1
         
+        weight_mat.append(weight_list)
+
         j = j+1
-    
+
+    print(weight_mat[1][2])
     #calculation of generalization error
     gen_error_mat = np.empty((1,len(reg_param)))
     for l in range(error_mat.shape[1]):
@@ -208,6 +218,7 @@ def regression_a(X_regr, y_regr):
     #determine best model (according to generalization error)
     best_model = np.argmin(gen_error_mat, axis=1)
     print(f"The best model parameter lambda is: {np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model])}")
+    print(f"The overall best model is: {np.where(error_mat == error_mat.min())} ")
 
     #plot the generalization error w.r.t the regularization parameter
     plt.figure()
@@ -219,31 +230,17 @@ def regression_a(X_regr, y_regr):
     plt.xscale("log")
     plt.legend()
     plt.show()
-    
-    #redo CV for the best model to generate avg. of coefficients
-    coef_list = []
-    for train_idx, test_idx in CV.split(X_regr):
-        #initialization of training ad test data for the split
-        X_train, y_train = X_regr.values[train_idx,:], y_regr.values[train_idx]
-        X_test, y_test = X_regr.values[test_idx,:], y_regr.values[test_idx]
-        
-        #shall this be done for every CV or just once at the begining?
-        #standardization of the training data
-        standardizer = Standardize()
-        X_train = standardizer.fit(X_train)
-        X_test = standardizer.transform(X_test)
-        
-        #model needs to be adapted once seen in the lecture
-        #training of linear regression model
-        lm = L2RegularizedLinearRegression(bias=bias,lambda_=np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model]))
-        lm.fit(X_train,y_train)
-        coef_list.append(lm.get_weights())
-    
-    #calculate mean of coefficients
-    coef_array = np.asarray(coef_list)
-    coef_mean = np.zeros((1,coef_array.shape[1]))
-    for i in range(coef_array.shape[1]):
-        coef_mean[0,i] = coef_array[:,i].mean()
+
+    #calculate mean of coefficients for best model
+    coef_mean_list = []
+    for j in range(len(weight_mat[0])):
+        weight_sum = np.zeros((1,weight_mat[0][0].shape[0]))
+        for i in range(len(weight_mat)):
+            weight_sum = weight_mat[i][j] + weight_sum
+
+        coef_mean_list.append(weight_sum/len(weight_mat[0]))
+
+    coef_mean = coef_mean_list[best_model[0]]
 
     #bar plot for the mean coefficients w.r.t the features
     plt.figure()
