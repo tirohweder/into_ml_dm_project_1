@@ -102,7 +102,7 @@ class ANNRegression:
             print('\t\t{}\t{}\t\t{}'.format('Iter', 'Loss','Rel. loss'))
             learning_curve = []
             old_loss = 1e6
-            for i in range(self.max_iter):
+            for i in range(int(self.max_iter)):
                 y_est = net(X)
                 loss = self.loss_fct(y_est, y)
                 loss_value = loss.data.numpy()
@@ -214,7 +214,7 @@ def train_ANN(collector, param_list, X_train, y_train, X_val, y_val):
     for param in param_list:
         #model needs to be adapted once seen in the lecture
         #training of ann model
-        model = ANNRegression(n_hidden_units=param, n_input_units=X_train.shape[1], n_replicates=2, max_iter=15*10**4)
+        model = ANNRegression(n_hidden_units=param, n_input_units=X_train.shape[1], n_replicates=2, max_iter=1.5*10**4)
         
         y_train_pred, y_val_pred, error_train, error_val = train_reg_B(model, X_train, y_train, X_val, y_val)
                 
