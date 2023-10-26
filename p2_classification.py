@@ -162,15 +162,35 @@ def train_class(model, X_train, y_train, X_val, y_val):
     #error_val = np.count_nonzero(np.sum(np.abs(y_val-y_val_pred),axis=1))/y_val.shape[0]
     return y_train_pred, y_val_pred, error_train, error_val
 
+def mcnemars_test(cA, cB):
+    cA, cB = np.concatenate(cA), np.concatenate(cB)
+    alpha=0.05
+
+    n11 = np.sum(np.multiply(cA,cB))
+    n12 = np.sum(np.multiply(cA,np.ones(cB.shape)-cB))
+    n21 = np.sum(np.multiply(np.ones(cA.shape)-cA,cB))
+    n22 = np.sum(np.multiply(np.ones(cA.shape)-cA,np.ones(cB.shape)-cB))
+    n = n11+n12+n21+n22
+    theta_est = (n12-n21)/n
+    Q = (n**2 * (n+1) * (theta_est+1) * (1-theta_est))/(n*(n12+n21)-((n12-n21)**2))
+    f = (theta_est+1)*(Q-1)/2
+    g = (1-theta_est)*(Q-1)/2
+
+    CI = tuple(i * 2 -1 for i in st.beta.interval(1-alpha, a=f, b=g))
+
+    p = 2*st.binom.cdf(min([n12,n21]), n=n12+n21, p=0.5)
+
+    return CI, p
+
 def classification(X_class, y_class):
     #Classification
     n_classes = np.max(y_class)+1
 
     #initialize CV
-    outer_K = 3
+    outer_K = 10
     outer_CV = KFold(n_splits=outer_K, shuffle=True, random_state=44)
     
-    inner_K = 2
+    inner_K = 10
     inner_CV = KFold(n_splits=inner_K, shuffle=True, random_state=44)
 
     #create list of arrays to store all inner CV data
@@ -183,12 +203,15 @@ def classification(X_class, y_class):
     ann_param = [1, 10, 20, 50]
     
     #define lineare regression parameters
-    lm_param = [10**-8, 10**-7, 10**-6, 10**-5, 10**-4, 10, 100]
+    lm_param = [10**-9, 10**-6, 10**-3, 1, 1000]
 
     #initialize loss lists
-    z_bm = []
-    z_lm = []
-    z_ann = []
+    c_bm = []
+    c_lm = []
+    c_ann = []
+
+    #list to collect coefficents of best multinomial regression model
+    coef_list = []
 
     j=0
     for par_idx, test_idx in outer_CV.split(X_class):
@@ -238,7 +261,7 @@ def classification(X_class, y_class):
         y_par_pred_bm = bm.predict(X_par)
         y_test_pred_bm = bm.predict(X_test)
 
-        z_bm.append((y_test_pred_bm != y_test))
+        c_bm.append((y_test_pred_bm == y_test))
         
         err_par_bm = np.sum((y_par_pred_bm != y_par))/y_par.shape[0]
         err_test_bm = np.sum((y_test_pred_bm != y_test))/y_test.shape[0]
@@ -254,7 +277,7 @@ def classification(X_class, y_class):
         y_par_pred_ann = ann.predict(X_par)
         y_test_pred_ann = ann.predict(X_test)
 
-        z_ann.append((y_test_pred_ann != y_test))
+        c_ann.append((y_test_pred_ann == y_test))
         
         err_par_ann = np.sum((y_par_pred_ann != y_par))/y_par.shape[0]
         err_test_ann = np.sum((y_test_pred_ann != y_test))/y_test.shape[0]
@@ -271,13 +294,14 @@ def classification(X_class, y_class):
         y_par_pred_lm = lm.predict(X_par)
         y_test_pred_lm = lm.predict(X_test)
 
-        z_lm.append((y_test_pred_lm != y_test))
+        c_lm.append((y_test_pred_lm == y_test))
         
         err_par_lm = np.sum((y_par_pred_lm != y_par))/y_par.shape[0]
         err_test_lm = np.sum((y_test_pred_lm != y_test))/y_test.shape[0]
         
         outer_collector.set_lm_perf(err_test_lm, j)
         outer_collector.set_lm_param_idx(best_param_idx, j)
+        coef_list.append(np.concatenate((lm.coef_,np.reshape(lm.intercept_,(lm.intercept_.shape[0],1))),axis=1))
 
         j = j+1
 
@@ -292,6 +316,28 @@ def classification(X_class, y_class):
     
     with open(os.path.join(os.getcwd(),'classification_table.txt'), 'w') as f:
         f.write(table_b_df.to_string())
-    
+
+    #Test for ANN and BM
+    CI, p_value = mcnemars_test(c_ann, c_bm)
+    print(f"The statistical test for the ANN and BM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for ANN an LM
+    CI, p_value = mcnemars_test(c_ann, c_lm)
+    print(f"The statistical test for the ANN and LM has a CI of {CI} and a p-value of {p_value}")
+
+    #Test for LM and BM
+    CI, p_value = mcnemars_test(c_lm, c_bm)
+    print(f"The statistical test for the LM and BM has a CI of {CI} and a p-value of {p_value}") 
+
+    best_lm_idx = np.argmin(outer_collector.get_lm_perf())
+    seasons = ["winter", "spring", "summer", "fall"]
+    for i in range(coef_list[best_lm_idx].shape[0]):
+        plt.figure()
+        plt.barh(np.concatenate((np.asarray(X_class.columns),["bias"]),0), coef_list[best_lm_idx][i,:].flatten())
+        plt.title(f'Coefficients of Best Linear Regression Model for class {seasons[i]}')
+        plt.xlabel('coefficient')
+        plt.ylabel('feature')
+        plt.show()
+
     print("classification task done")
        
