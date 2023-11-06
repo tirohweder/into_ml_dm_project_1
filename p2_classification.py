@@ -125,7 +125,7 @@ def train_lm(collector, param_list, X_train, y_train, X_val, y_val):
     for param in param_list:
         #model needs to be adapted once seen in the lecture
         #training of ann model
-        model = LogisticRegression(solver='lbfgs', multi_class='multinomial', tol=1e-4, random_state=44, penalty='l2', C=1/param, max_iter=1**3)
+        model = LogisticRegression(solver='lbfgs', multi_class='multinomial', tol=1e-4, random_state=44, penalty='l2', C=1/param, max_iter=1**4)
         
         y_train_pred, y_val_pred, error_train, error_val = train_class(model, X_train, y_train, X_val, y_val)
                 
@@ -288,7 +288,7 @@ def classification(X_class, y_class):
         #train best Linear Model of inner CV
         best_param_idx, best_param = get_best_parameters(inner_CV_list, lm_param, 1)
         
-        lm = LogisticRegression(solver='lbfgs', multi_class='multinomial', tol=1e-4, random_state=44, penalty='l2', C=1/best_param, max_iter=1**3)
+        lm = LogisticRegression(solver='lbfgs', multi_class='multinomial', tol=1e-4, random_state=44, penalty='l2', C=1/best_param, max_iter=1**4)
         lm.fit(X_par,y_par)
         
         y_par_pred_lm = lm.predict(X_par)
