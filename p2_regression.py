@@ -256,6 +256,7 @@ def regression_a(X_regr, y_regr):
     #determine best model (according to generalization error)
     best_model = np.argmin(gen_error_mat, axis=1)
     print(f"The best model parameter lambda is: {np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model])}")
+    print(f"The average error of the best model parameter lambda is: {avg_train_error_mat.min()}")
     print(f"The overall best model is: {np.where(error_mat == error_mat.min())} ")
     arg = np.where(error_mat == error_mat.min())
 
