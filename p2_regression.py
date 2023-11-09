@@ -192,7 +192,7 @@ def regression_a(X_regr, y_regr):
     CV = KFold(n_splits=K, shuffle=True, random_state=44)
     
     #list of parameters for regression model
-    reg_param = [0, 10**-15, 10**-12, 10**-9, 10**-6, 10**-3, 10**-2, 0.1, 1]
+    reg_param = [0, 10**-12, 10**-9, 10**-6, 10**-3, 1]
     bias = True
     
     #array to record all errors
@@ -243,7 +243,6 @@ def regression_a(X_regr, y_regr):
 
         j = j+1
 
-    print(weight_mat[1][2])
     #calculation of generalization error
     gen_error_mat = np.empty((1,len(reg_param)))
     for l in range(error_mat.shape[1]):
@@ -257,7 +256,9 @@ def regression_a(X_regr, y_regr):
     #determine best model (according to generalization error)
     best_model = np.argmin(gen_error_mat, axis=1)
     print(f"The best model parameter lambda is: {np.ndarray.item(np.asarray(reg_param, dtype=float)[best_model])}")
+    print(f"The average error of the best model parameter lambda is: {avg_train_error_mat.min()}")
     print(f"The overall best model is: {np.where(error_mat == error_mat.min())} ")
+    arg = np.where(error_mat == error_mat.min())
 
     #plot the generalization error w.r.t the regularization parameter
     plt.figure()
@@ -265,7 +266,7 @@ def regression_a(X_regr, y_regr):
     plt.plot(np.asarray(reg_param).ravel(), gen_error_mat.ravel(), "b.-", label="Generalization Error")
     plt.title('Generalization Error as a function of the regularization parameter')
     plt.xlabel('regularization parameter')
-    plt.ylabel('Generalization error')
+    plt.ylabel('generalization error')
     plt.xscale("log")
     plt.legend()
     plt.show()
@@ -280,6 +281,19 @@ def regression_a(X_regr, y_regr):
         coef_mean_list.append(weight_sum/len(weight_mat[0]))
 
     coef_mean = coef_mean_list[best_model[0]]
+
+    #bar plot for the coefficients for the best model
+    plt.figure()
+    if bias == False:
+        bar = plt.barh(np.asarray(X_regr.columns), weight_mat[int(arg[0])][int(arg[1])].flatten())
+    else:
+         bar = plt.barh(np.concatenate((["bias"],np.asarray(X_regr.columns)),0), weight_mat[int(arg[0])][int(arg[1])].flatten())
+    plt.bar_label(bar, padding=5, fmt='%.2f')
+    plt.margins(x=0.25)
+    plt.title(f'Coefficients of Best Linear Regression Model with λ={reg_param[int(arg[1])]} and MSE={error_mat.min():.2f}')
+    plt.xlabel('coefficient')
+    plt.ylabel('feature')
+    plt.show()
 
     #bar plot for the mean coefficients w.r.t the features
     plt.figure()
@@ -309,7 +323,7 @@ def regression_b(X_regr, y_regr):
     outer_collector = OuterCVDataCollection(outer_K)
     
     #define ANN parameters
-    ann_param = [1, 10, 20, 50]
+    ann_param = [1, 10, 20, 50, 100]
     
     #define lineare regression parameters
     lm_param = [10**-7, 10**-6, 10**-5, 10**-4, 10**-3]

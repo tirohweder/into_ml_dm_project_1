@@ -57,9 +57,9 @@ def main():
     X_class = data_class.drop(["season"], axis=1)
     y_class = data_class["season"]
     
-    #regression_a(X_regr, y_regr)
+    regression_a(X_regr, y_regr)
     
-    #regression_b(X_regr, y_regr)
+    regression_b(X_regr, y_regr)
 
     classification(X_class, y_class)
         
