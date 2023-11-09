@@ -59,9 +59,9 @@ def main():
     
     regression_a(X_regr, y_regr)
     
-    #regression_b(X_regr, y_regr)
+    regression_b(X_regr, y_regr)
 
-    #classification(X_class, y_class)
+    classification(X_class, y_class)
         
     
     
