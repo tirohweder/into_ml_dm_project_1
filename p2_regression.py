@@ -323,10 +323,10 @@ def regression_b(X_regr, y_regr):
     outer_collector = OuterCVDataCollection(outer_K)
     
     #define ANN parameters
-    ann_param = [1, 10, 20, 50, 100]
+    ann_param = [1, 10, 50, 100, 200]
     
     #define lineare regression parameters
-    lm_param = [10**-7, 10**-6, 10**-5, 10**-4, 10**-3]
+    lm_param = [10**-9, 10**-6, 10**-3, 1]
     bias = True
     
     #initialize loss lists
