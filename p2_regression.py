@@ -259,6 +259,7 @@ def regression_a(X_regr, y_regr):
     print(f"The average error of the best model parameter lambda is: {avg_train_error_mat.min()}")
     print(f"The overall best model is: {np.where(error_mat == error_mat.min())} ")
     arg = np.where(error_mat == error_mat.min())
+    arg_bestmodel = np.where(error_mat == error_mat[:,best_model].min())
 
     #plot the generalization error w.r.t the regularization parameter
     plt.figure()
@@ -295,6 +296,19 @@ def regression_a(X_regr, y_regr):
     plt.ylabel('feature')
     plt.show()
 
+    #bar plot for the coefficients of best model for best coefficient
+    plt.figure()
+    if bias == False:
+        bar = plt.barh(np.asarray(X_regr.columns), weight_mat[int(arg_bestmodel[0])][int(arg_bestmodel[1])].flatten())
+    else:
+         bar = plt.barh(np.concatenate((["bias"],np.asarray(X_regr.columns)),0), weight_mat[int(arg_bestmodel[0])][int(arg_bestmodel[1])].flatten())
+    plt.bar_label(bar, padding=5, fmt='%.2f')
+    plt.margins(x=0.25)
+    plt.title(f'Coefficients of best LM using best generalization error. λ={reg_param[int(arg_bestmodel[1])]} and MSE={error_mat[:,best_model].min():.2f}')
+    plt.xlabel('coefficient')
+    plt.ylabel('feature')
+    plt.show()
+
     #bar plot for the mean coefficients w.r.t the features
     plt.figure()
     if bias == False:
@@ -323,10 +337,10 @@ def regression_b(X_regr, y_regr):
     outer_collector = OuterCVDataCollection(outer_K)
     
     #define ANN parameters
-    ann_param = [1, 10, 20, 50, 100]
+    ann_param = [1, 10, 50, 100, 200]
     
     #define lineare regression parameters
-    lm_param = [10**-7, 10**-6, 10**-5, 10**-4, 10**-3]
+    lm_param = [10**-9, 10**-6, 10**-3, 1]
     bias = True
     
     #initialize loss lists
